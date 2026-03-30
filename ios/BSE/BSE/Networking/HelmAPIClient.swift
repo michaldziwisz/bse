@@ -54,7 +54,7 @@ struct HelmAPIClient {
         let session = self.session
         let timeout = self.requestTimeout
 
-        try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
+        return try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
             group.addTask {
                 try await session.data(for: request)
             }

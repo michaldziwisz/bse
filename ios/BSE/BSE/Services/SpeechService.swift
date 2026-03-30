@@ -3,14 +3,16 @@ import UIKit
 
 @MainActor
 final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate {
-    private let synthesizer = AVSpeechSynthesizer()
-    private var continuation: CheckedContinuation<Void, Never>?
+    private var synthesizer: AVSpeechSynthesizer
+    private var continuation: CheckedContinuation<SpeechOutcome, Never>?
+    private var timeoutTask: Task<Void, Never>?
     private let audioSessionController: AudioSessionController
 
     init(audioSessionController: AudioSessionController) {
         self.audioSessionController = audioSessionController
+        self.synthesizer = AVSpeechSynthesizer()
         super.init()
-        synthesizer.delegate = self
+        configureSynthesizer()
     }
 
     func announce(_ text: String, settings: AppSettings) async {
@@ -20,46 +22,56 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         if shouldUseAccessibilityAnnouncement {
             UIAccessibility.post(notification: .announcement, argument: text)
         } else {
-            await speak(text, settings: settings)
+            await speakWithRecovery(text, settings: settings)
         }
     }
 
     func announceCritical(_ text: String, settings: AppSettings) async {
-        await speak(text, settings: settings)
+        await speakWithRecovery(text, settings: settings)
     }
 
     func stop() {
-        let pendingContinuation = continuation
-        continuation = nil
-        pendingContinuation?.resume(returning: ())
-        synthesizer.stopSpeaking(at: .immediate)
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        completeCurrentSpeech(with: .cancelled)
+        if synthesizer.isSpeaking || synthesizer.isPaused {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        rebuildSynthesizer()
     }
 
     func speechSynthesizer(
         _ synthesizer: AVSpeechSynthesizer,
         didFinish utterance: AVSpeechUtterance
     ) {
-        continuation?.resume(returning: ())
-        continuation = nil
+        completeCurrentSpeech(with: .finished)
     }
 
     func speechSynthesizer(
         _ synthesizer: AVSpeechSynthesizer,
         didCancel utterance: AVSpeechUtterance
     ) {
-        continuation?.resume(returning: ())
-        continuation = nil
+        completeCurrentSpeech(with: .cancelled)
     }
 
-    private func speak(_ text: String, settings: AppSettings) async {
-        if synthesizer.isSpeaking {
+    private func speakWithRecovery(_ text: String, settings: AppSettings) async {
+        let outcome = await speakOnce(text, settings: settings)
+        if outcome == .timedOut {
+            rebuildSynthesizer()
+            _ = await speakOnce(text, settings: settings)
+        }
+    }
+
+    private func speakOnce(_ text: String, settings: AppSettings) async -> SpeechOutcome {
+        if synthesizer.isSpeaking || synthesizer.isPaused {
             synthesizer.stopSpeaking(at: .immediate)
+            rebuildSynthesizer()
         }
 
         do {
             try audioSessionController.prepareForPlayback()
         } catch {
-            return
+            return .cancelled
         }
 
         let utterance = AVSpeechUtterance(string: text)
@@ -68,8 +80,11 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         utterance.rate = mapRate(fromPercent: settings.readingRate)
         utterance.prefersAssistiveTechnologySettings = true
 
-        await withCheckedContinuation { continuation in
+        let timeout = speechTimeout(for: text, settings: settings)
+
+        return await withCheckedContinuation { continuation in
             self.continuation = continuation
+            scheduleTimeout(after: timeout)
             synthesizer.speak(utterance)
         }
     }
@@ -87,4 +102,53 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         let scaled = 0.28 + ((normalized - 50) / 350) * 0.36
         return Float(scaled)
     }
+
+    private func configureSynthesizer() {
+        synthesizer.delegate = self
+        synthesizer.usesApplicationAudioSession = true
+    }
+
+    private func rebuildSynthesizer() {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        synthesizer.delegate = nil
+        synthesizer = AVSpeechSynthesizer()
+        configureSynthesizer()
+    }
+
+    private func scheduleTimeout(after seconds: TimeInterval) {
+        timeoutTask?.cancel()
+        timeoutTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            await MainActor.run {
+                guard self.continuation != nil else { return }
+                self.completeCurrentSpeech(with: .timedOut)
+                if self.synthesizer.isSpeaking || self.synthesizer.isPaused {
+                    self.synthesizer.stopSpeaking(at: .immediate)
+                }
+                self.rebuildSynthesizer()
+            }
+        }
+    }
+
+    private func completeCurrentSpeech(with outcome: SpeechOutcome) {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        let pendingContinuation = continuation
+        continuation = nil
+        pendingContinuation?.resume(returning: outcome)
+    }
+
+    private func speechTimeout(for text: String, settings: AppSettings) -> TimeInterval {
+        let baseDuration = max(6, Double(text.count) / 7 + 4)
+        let rateFactor = max(settings.readingRate / 150, 0.5)
+        return min(max(baseDuration / rateFactor, 4), 20)
+    }
+}
+
+private enum SpeechOutcome {
+    case finished
+    case cancelled
+    case timedOut
 }

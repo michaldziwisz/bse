@@ -5,6 +5,7 @@ final class HelmMonitor: ObservableObject {
     @Published private(set) var snapshot: HelmSnapshot?
     @Published private(set) var isReadingEnabled = false
     @Published private(set) var isPolling = false
+    @Published private(set) var isConnectionLost = false
     @Published private(set) var lastAnnouncement = ""
     @Published var errorMessage: String?
     @Published var adminMessage: String?
@@ -14,10 +15,13 @@ final class HelmMonitor: ObservableObject {
     private let apiClient: HelmAPIClient
     private let speechService: SpeechService
     private let tonePlayer: TonePlayer
+    private let audioSessionController: AudioSessionController
+    private let notificationController: SafetyNotificationController
 
     private let statusInterval: TimeInterval = 0.5
     private let loopDelayNanoseconds: UInt64 = 100_000_000
     private let frequencyMid = 440.0
+    private let connectionAlertRepeatInterval: TimeInterval = 20
 
     private var loopTask: Task<Void, Never>?
     private var isReadingInProgress = false
@@ -26,15 +30,20 @@ final class HelmMonitor: ObservableObject {
     private var lastSignalAt = Date.distantPast
     private var lastFetchAt = Date.distantPast
     private var lastSignaledSnapshot: HelmSnapshot?
+    private var lastConnectionAlertAt = Date.distantPast
 
     init(
         settingsStore: SettingsStore,
-        apiClient: HelmAPIClient = HelmAPIClient()
+        apiClient: HelmAPIClient = HelmAPIClient(),
+        audioSessionController: AudioSessionController,
+        notificationController: SafetyNotificationController
     ) {
         self.settingsStore = settingsStore
         self.apiClient = apiClient
-        self.speechService = SpeechService()
-        self.tonePlayer = TonePlayer()
+        self.audioSessionController = audioSessionController
+        self.notificationController = notificationController
+        self.speechService = SpeechService(audioSessionController: audioSessionController)
+        self.tonePlayer = TonePlayer(audioSessionController: audioSessionController)
     }
 
     func start() {
@@ -52,18 +61,26 @@ final class HelmMonitor: ObservableObject {
         isReadingEnabled = false
         speechService.stop()
         tonePlayer.stop()
+        audioSessionController.stopKeepAlive()
+        notificationController.clearConnectionLostAlert()
     }
 
     func toggleReading() {
-        if errorMessage != nil {
-            errorMessage = nil
-            isReadingEnabled = true
-            return
-        }
         isReadingEnabled.toggle()
-        if !isReadingEnabled {
+        errorMessage = nil
+
+        if isReadingEnabled {
+            do {
+                try audioSessionController.startKeepAlive()
+            } catch {
+                errorMessage = error.localizedDescription
+                isReadingEnabled = false
+            }
+        } else {
             speechService.stop()
             tonePlayer.stop()
+            audioSessionController.stopKeepAlive()
+            notificationController.clearConnectionLostAlert()
         }
     }
 
@@ -81,6 +98,10 @@ final class HelmMonitor: ObservableObject {
 
     func clearError() {
         errorMessage = nil
+    }
+
+    func prepareSafetyServices() async {
+        await notificationController.requestAuthorizationIfNeeded()
     }
 
     func runAdministrationAction(_ action: AdministrationAction) async {
@@ -130,7 +151,7 @@ final class HelmMonitor: ObservableObject {
                    now.timeIntervalSince(lastSignalAt) >= currentSettings.toneDelay {
                     lastSignalAt = now
                     isSignalInProgress = true
-                   let capturedSnapshot = snapshot
+                    let capturedSnapshot = snapshot
                     let capturedLastSnapshot = lastSignaledSnapshot
                     let capturedSettings = currentSettings
                     lastSignaledSnapshot = snapshot
@@ -160,16 +181,35 @@ final class HelmMonitor: ObservableObject {
                 let corrected = raw + settings.rudderAngleCorrection
                 return settings.invertRudderAngle ? -corrected : corrected
             }()
+            let recovered = isConnectionLost
+
             snapshot = HelmSnapshot(
                 course: course,
                 rudder: rudder,
                 wind: readings.wa,
                 fetchedAt: Date()
             )
+            isConnectionLost = false
+            errorMessage = nil
+            notificationController.clearConnectionLostAlert()
+
+            if recovered, isReadingEnabled {
+                let recoveryMessage = "Połączenie zostało przywrócone."
+                lastAnnouncement = recoveryMessage
+                await speechService.announceCritical(recoveryMessage, settings: settings)
+            }
         } catch {
-            snapshot = nil
-            isReadingEnabled = false
-            errorMessage = "Błąd połączenia z endpointem: \(error.localizedDescription)"
+            let message = "Utracono połączenie z endpointem steru. Trwa ponawianie transmisji."
+            let shouldAlert = !isConnectionLost
+                || Date().timeIntervalSince(lastConnectionAlertAt) >= connectionAlertRepeatInterval
+
+            isConnectionLost = true
+            errorMessage = message
+
+            if shouldAlert, isReadingEnabled {
+                lastConnectionAlertAt = Date()
+                await alertAboutConnectionLoss(message: message)
+            }
         }
     }
 
@@ -178,6 +218,23 @@ final class HelmMonitor: ObservableObject {
         let text = announcement(for: snapshot, settings: settings)
         lastAnnouncement = text
         await speechService.announce(text, settings: settings)
+    }
+
+    private func alertAboutConnectionLoss(message: String) async {
+        lastAnnouncement = message
+
+        if isReadingEnabled {
+            let settings = settingsStore.settings
+            await tonePlayer.playAlertPattern(
+                volume: settings.toneVolume / 100,
+                waveform: settings.toneType
+            )
+            await speechService.announceCritical(message, settings: settings)
+        }
+
+        await notificationController.scheduleConnectionLostAlert(
+            details: "Sprawdź połączenie lub zakłócenia transmisji. Aplikacja nadal ponawia odczyt."
+        )
     }
 
     private func playSignal(

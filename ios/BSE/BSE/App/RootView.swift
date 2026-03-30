@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var monitor: HelmMonitor
@@ -22,6 +23,10 @@ struct RootView: View {
         }
         .task {
             monitor.start()
+            await monitor.prepareSafetyServices()
+        }
+        .onChange(of: monitor.isReadingEnabled) { isReadingEnabled in
+            UIApplication.shared.isIdleTimerDisabled = isReadingEnabled
         }
     }
 }

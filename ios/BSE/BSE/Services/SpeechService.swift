@@ -5,19 +5,27 @@ import UIKit
 final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate {
     private let synthesizer = AVSpeechSynthesizer()
     private var continuation: CheckedContinuation<Void, Never>?
+    private let audioSessionController: AudioSessionController
 
-    override init() {
+    init(audioSessionController: AudioSessionController) {
+        self.audioSessionController = audioSessionController
         super.init()
         synthesizer.delegate = self
     }
 
     func announce(_ text: String, settings: AppSettings) async {
-        switch settings.readingOutput {
-        case .aria:
+        let shouldUseAccessibilityAnnouncement = settings.readingOutput == .aria
+            && UIApplication.shared.applicationState == .active
+
+        if shouldUseAccessibilityAnnouncement {
             UIAccessibility.post(notification: .announcement, argument: text)
-        case .tts:
+        } else {
             await speak(text, settings: settings)
         }
+    }
+
+    func announceCritical(_ text: String, settings: AppSettings) async {
+        await speak(text, settings: settings)
     }
 
     func stop() {
@@ -48,10 +56,17 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
             synthesizer.stopSpeaking(at: .immediate)
         }
 
+        do {
+            try audioSessionController.prepareForPlayback()
+        } catch {
+            return
+        }
+
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice(for: settings.readingVoiceIdentifier)
         utterance.volume = Float(settings.readingVolume / 100)
         utterance.rate = mapRate(fromPercent: settings.readingRate)
+        utterance.prefersAssistiveTechnologySettings = true
 
         await withCheckedContinuation { continuation in
             self.continuation = continuation

@@ -6,8 +6,10 @@ final class TonePlayer {
     private let sampleRate = 44_100.0
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    private let audioSessionController: AudioSessionController
 
-    init() {
+    init(audioSessionController: AudioSessionController) {
+        self.audioSessionController = audioSessionController
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
@@ -26,6 +28,7 @@ final class TonePlayer {
     ) async {
         guard duration > 0 else { return }
         do {
+            try audioSessionController.prepareForPlayback()
             try ensureEngineStarted()
             let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
             let frameCount = AVAudioFrameCount(duration * sampleRate)
@@ -58,10 +61,23 @@ final class TonePlayer {
         }
     }
 
+    func playAlertPattern(volume: Double, waveform: ToneWaveform) async {
+        let alertVolume = max(volume, 0.65)
+        let frequencies: [Double] = [880, 660, 880]
+
+        for frequency in frequencies {
+            await play(
+                frequency: frequency,
+                duration: 0.18,
+                volume: alertVolume,
+                waveform: waveform
+            )
+            try? await Task.sleep(nanoseconds: 90_000_000)
+        }
+    }
+
     private func ensureEngineStarted() throws {
         if engine.isRunning { return }
-        try AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
-        try AVAudioSession.sharedInstance().setActive(true)
         try engine.start()
     }
 

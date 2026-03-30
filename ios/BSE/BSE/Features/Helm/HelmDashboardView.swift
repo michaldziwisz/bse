@@ -10,6 +10,9 @@ struct HelmDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    if monitor.isConnectionLost {
+                        connectionWarningSection
+                    }
                     statusSection
                     controlsSection
                     latestAnnouncementSection
@@ -53,6 +56,27 @@ struct HelmDashboardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var connectionWarningSection: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title2)
+                .foregroundStyle(.yellow)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Połączenie utracone")
+                    .font(.headline)
+                Text("Aplikacja nadal pracuje w tle, ponawia odczyt i alarmuje użytkownika.")
+                    .font(.subheadline)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Połączenie utracone. Aplikacja ponawia odczyt i alarmuje użytkownika.")
     }
 
     private var controlsSection: some View {

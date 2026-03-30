@@ -31,6 +31,8 @@ final class HelmMonitor: ObservableObject {
     private var lastFetchAt = Date.distantPast
     private var lastSignaledSnapshot: HelmSnapshot?
     private var lastConnectionAlertAt = Date.distantPast
+    private var speechGeneration: UInt64 = 0
+    private var isSpeechActive = false
 
     init(
         settingsStore: SettingsStore,
@@ -59,6 +61,8 @@ final class HelmMonitor: ObservableObject {
         loopTask = nil
         isPolling = false
         isReadingEnabled = false
+        speechGeneration += 1
+        isSpeechActive = false
         speechService.stop()
         tonePlayer.stop()
         audioSessionController.stopKeepAlive()
@@ -77,6 +81,8 @@ final class HelmMonitor: ObservableObject {
                 isReadingEnabled = false
             }
         } else {
+            speechGeneration += 1
+            isSpeechActive = false
             speechService.stop()
             tonePlayer.stop()
             audioSessionController.stopKeepAlive()
@@ -196,7 +202,7 @@ final class HelmMonitor: ObservableObject {
             if recovered, isReadingEnabled {
                 let recoveryMessage = "Połączenie zostało przywrócone."
                 lastAnnouncement = recoveryMessage
-                await speechService.announceCritical(recoveryMessage, settings: settings)
+                await speakCritical(recoveryMessage, settings: settings)
             }
         } catch {
             let message = "Utracono połączenie z endpointem steru. Trwa ponawianie transmisji."
@@ -217,7 +223,7 @@ final class HelmMonitor: ObservableObject {
         defer { isReadingInProgress = false }
         let text = announcement(for: snapshot, settings: settings)
         lastAnnouncement = text
-        await speechService.announce(text, settings: settings)
+        await speakRegular(text, settings: settings)
     }
 
     private func alertAboutConnectionLoss(message: String) async {
@@ -229,7 +235,7 @@ final class HelmMonitor: ObservableObject {
                 volume: settings.toneVolume / 100,
                 waveform: settings.toneType
             )
-            await speechService.announceCritical(message, settings: settings)
+            await speakCritical(message, settings: settings)
         }
 
         await notificationController.scheduleConnectionLostAlert(
@@ -341,5 +347,30 @@ final class HelmMonitor: ObservableObject {
             }
         }
         return try await operation()
+    }
+
+    private func speakRegular(_ text: String, settings: AppSettings) async {
+        guard !isSpeechActive else { return }
+
+        speechGeneration += 1
+        let generation = speechGeneration
+        isSpeechActive = true
+        await speechService.announce(text, settings: settings)
+
+        if speechGeneration == generation {
+            isSpeechActive = false
+        }
+    }
+
+    private func speakCritical(_ text: String, settings: AppSettings) async {
+        speechGeneration += 1
+        let generation = speechGeneration
+        speechService.stop()
+        isSpeechActive = true
+        await speechService.announceCritical(text, settings: settings)
+
+        if speechGeneration == generation {
+            isSpeechActive = false
+        }
     }
 }

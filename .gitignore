@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 DerivedData/
+artifacts/
 *.xcodeproj
 *.xcworkspace
 *.xcuserstate

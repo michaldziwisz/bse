@@ -1,0 +1,22 @@
+mock endpointa jest tutaj: https://blueseaeye.eu/api/helm
+Zaznaczam, że nie obsługuje przesyłanych parametrów, tak jak oryginalne
+urządzenie, ale z perspektywy testów nie powinien to być specjalny problem.
+
+
+
+Co do endpointu `/api/helm`:
+
+Parametry query (opcjonalne):
+- window: okno uśredniania kursu (integer 1-5)
+- source: wybranie źródła kursu, wartości jak klucze pól kursu w
+odpowiedzi (wyłącza wszystkie inne źródła kursu w odpowiedzi)
+
+Odpowiedź (wartości przekazane jeśli dostępne):
+- cgfa:double, kurs filtrowany uśredniany
+- cgf: double, kurs filtrowany
+- coga: double, kurs nad ziemią uśredniany
+- cog: double, kurs nad ziemią
+- hdga: double, kurs kompasowy uśredniany
+- hdg: double, kurs kompasowy
+- rsa: double, wychylenie steru
+- wa: double, kąt do wiatru

@@ -1,0 +1,18 @@
+{
+  "opts": {
+      "template": "node_modules/docdash",
+      "encoding": "utf8"
+  },
+  "docdash": {
+    "sectionOrder": [
+      "Modules",
+      "Classes",
+      "Externals",
+      "Events",
+      "Namespaces",
+      "Mixins",
+      "Tutorials",
+      "Interfaces"
+    ]
+  }
+}

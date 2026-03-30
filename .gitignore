@@ -1,0 +1,12 @@
+.DS_Store
+*.swp
+*.swo
+node_modules/
+dist/
+build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+*.xcuserstate
+*.xcuserdata/
+ios/BSE/build/

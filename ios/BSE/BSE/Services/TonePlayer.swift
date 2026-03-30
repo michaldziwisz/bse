@@ -47,7 +47,7 @@ final class TonePlayer {
             }
 
             player.stop()
-            player.scheduleBuffer(buffer, at: nil, options: .interrupts)
+            await player.scheduleBuffer(buffer, at: nil, options: .interrupts)
             if !player.isPlaying {
                 player.play()
             }

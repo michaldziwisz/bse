@@ -2,7 +2,7 @@ import AVFoundation
 import UIKit
 
 @MainActor
-final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
+final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate {
     private let synthesizer = AVSpeechSynthesizer()
     private var continuation: CheckedContinuation<Void, Never>?
 

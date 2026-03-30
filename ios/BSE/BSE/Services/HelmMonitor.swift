@@ -29,14 +29,12 @@ final class HelmMonitor: ObservableObject {
 
     init(
         settingsStore: SettingsStore,
-        apiClient: HelmAPIClient = HelmAPIClient(),
-        speechService: SpeechService = SpeechService(),
-        tonePlayer: TonePlayer = TonePlayer()
+        apiClient: HelmAPIClient = HelmAPIClient()
     ) {
         self.settingsStore = settingsStore
         self.apiClient = apiClient
-        self.speechService = speechService
-        self.tonePlayer = tonePlayer
+        self.speechService = SpeechService()
+        self.tonePlayer = TonePlayer()
     }
 
     func start() {
@@ -152,8 +150,8 @@ final class HelmMonitor: ObservableObject {
 
     private func refreshSnapshot() async {
         do {
-            let readings = try await retrying(times: 3) {
-                try await apiClient.fetchHelmReadings(settings: settingsStore.settings)
+            let readings = try await retrying(times: 3) { [self] in
+                try await self.apiClient.fetchHelmReadings(settings: self.settingsStore.settings)
             }
             let settings = settingsStore.settings
             let course = readings.course(for: settings.courseSource)

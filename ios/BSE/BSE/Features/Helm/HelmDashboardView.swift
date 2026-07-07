@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 
 struct HelmDashboardView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var monitor: HelmMonitor
+    @Environment(\.openURL) private var openURL
 
     private var settings: AppSettings { settingsStore.settings }
 
@@ -59,24 +61,45 @@ struct HelmDashboardView: View {
     }
 
     private var connectionWarningSection: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.title2)
-                .foregroundStyle(.yellow)
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.yellow)
+                    .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Połączenie utracone")
-                    .font(.headline)
-                Text("Aplikacja nadal pracuje w tle, ponawia odczyt i alarmuje użytkownika.")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Połączenie utracone")
+                        .font(.headline)
+                    Text("Aplikacja nadal pracuje w tle, ponawia odczyt i alarmuje użytkownika.")
+                        .font(.subheadline)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Połączenie utracone. Aplikacja ponawia odczyt i alarmuje użytkownika.")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Jeśli połączenie nie wraca, sprawdź kolejno:")
+                    .font(.subheadline.weight(.semibold))
+                Text("1. Telefon jest połączony z siecią Wi-Fi „BlueSeaEye”.")
+                    .font(.subheadline)
+                Text("2. Aplikacja ma włączony dostęp do sieci lokalnej. Przy pierwszym uruchomieniu system pyta o zgodę – bez niej aplikacja nie odbierze danych z urządzenia.")
                     .font(.subheadline)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Jeśli połączenie nie wraca, sprawdź: po pierwsze, czy telefon jest połączony z siecią Wi-Fi BlueSeaEye. Po drugie, czy aplikacja ma włączony dostęp do sieci lokalnej. Przy pierwszym uruchomieniu system pyta o zgodę. Bez niej aplikacja nie odbierze danych z urządzenia.")
+
+            Button("Otwórz ustawienia aplikacji") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    openURL(url)
+                }
+            }
+            .buttonStyle(.bordered)
+            .accessibilityHint("Otwiera ustawienia systemowe aplikacji, gdzie można włączyć dostęp do sieci lokalnej.")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 18))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Połączenie utracone. Aplikacja ponawia odczyt i alarmuje użytkownika.")
     }
 
     private var controlsSection: some View {

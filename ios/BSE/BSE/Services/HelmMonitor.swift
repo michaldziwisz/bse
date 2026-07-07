@@ -50,7 +50,7 @@ final class HelmMonitor: ObservableObject {
         apiClient: HelmAPIClient = HelmAPIClient(),
         audioSessionController: AudioSessionController,
         notificationController: SafetyNotificationController,
-        nowPlayingController: NowPlayingController = NowPlayingController()
+        nowPlayingController: NowPlayingController
     ) {
         self.settingsStore = settingsStore
         self.apiClient = apiClient

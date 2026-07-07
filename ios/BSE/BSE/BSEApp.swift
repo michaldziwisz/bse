@@ -10,12 +10,14 @@ struct BSEApp: App {
         let settingsStore = SettingsStore()
         let audioSessionController = AudioSessionController()
         let notificationController = SafetyNotificationController()
+        let nowPlayingController = NowPlayingController()
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _monitor = StateObject(
             wrappedValue: HelmMonitor(
                 settingsStore: settingsStore,
                 audioSessionController: audioSessionController,
-                notificationController: notificationController
+                notificationController: notificationController,
+                nowPlayingController: nowPlayingController
             )
         )
     }

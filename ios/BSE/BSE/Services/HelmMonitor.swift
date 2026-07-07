@@ -22,8 +22,10 @@ final class HelmMonitor: ObservableObject {
     private let loopDelayNanoseconds: UInt64 = 100_000_000
     private let frequencyMid = 440.0
     private let connectionAlertRepeatInterval: TimeInterval = 20
+    private let keepAliveWatchdogInterval: TimeInterval = 3
 
     private var loopTask: Task<Void, Never>?
+    private var lastKeepAliveCheckAt = Date.distantPast
     private var isReadingInProgress = false
     private var isSignalInProgress = false
     private var lastReadAt = Date.distantPast
@@ -129,6 +131,12 @@ final class HelmMonitor: ObservableObject {
     private func runLoop() async {
         while !Task.isCancelled {
             let now = Date()
+
+            if isReadingEnabled, now.timeIntervalSince(lastKeepAliveCheckAt) >= keepAliveWatchdogInterval {
+                lastKeepAliveCheckAt = now
+                audioSessionController.ensureKeepAliveRunning()
+            }
+
             if now.timeIntervalSince(lastFetchAt) >= statusInterval {
                 lastFetchAt = now
                 await refreshSnapshot()

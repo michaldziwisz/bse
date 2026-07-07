@@ -205,7 +205,7 @@ final class HelmMonitor: ObservableObject {
                 await speakCritical(recoveryMessage, settings: settings)
             }
         } catch {
-            let message = "Utracono połączenie z endpointem steru. Trwa ponawianie transmisji."
+            let message = "Utracono połączenie z urządzeniem BlueSeaEye. Sprawdź sieć Wi-Fi. Trwa ponawianie transmisji."
             let shouldAlert = !isConnectionLost
                 || Date().timeIntervalSince(lastConnectionAlertAt) >= connectionAlertRepeatInterval
 

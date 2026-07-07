@@ -16,7 +16,7 @@ struct HelmDashboardView: View {
                     statusSection
                     controlsSection
                     latestAnnouncementSection
-                    endpointSection
+                    deviceSection
                 }
                 .padding()
             }
@@ -36,7 +36,7 @@ struct HelmDashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeaderText(
                 title: "Bieżący status",
-                description: "Widok stale odświeża dane z testowego endpointu."
+                description: "Widok stale odświeża dane z urządzenia BlueSeaEye."
             )
             CompassCardView(snapshot: monitor.snapshot, settings: settings)
 
@@ -51,7 +51,7 @@ struct HelmDashboardView: View {
                 ContentUnavailableView(
                     "Brak odczytów",
                     systemImage: "wifi.exclamationmark",
-                    description: Text("Sprawdź dostępność `https://blueseaeye.eu/api/helm`.")
+                    description: Text("Połącz telefon z siecią Wi-Fi „BlueSeaEye” i sprawdź adres urządzenia w Ustawieniach.")
                 )
             }
         }
@@ -152,15 +152,16 @@ struct HelmDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var endpointSection: some View {
+    private var deviceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeaderText(
-                title: "Endpoint testowy",
-                description: "Mock zwraca dane kursu i wychylenia steru, ale nie odwzorowuje wszystkich zachowań urządzenia."
+                title: "Urządzenie",
+                description: "Połącz telefon z siecią Wi-Fi „BlueSeaEye”. Adres urządzenia zmienisz w Ustawieniach."
             )
-            Text("https://blueseaeye.eu/api/helm")
+            Text(settings.deviceBaseURL().absoluteString)
                 .font(.body.monospaced())
                 .textSelection(.enabled)
+                .accessibilityLabel("Adres urządzenia \(settings.deviceBaseURL().absoluteString)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()

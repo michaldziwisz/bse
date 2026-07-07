@@ -113,7 +113,11 @@ final class AudioSessionController {
             let totalFrames = Int(frameCount)
             for frame in 0..<totalFrames {
                 let time = Double(frame) / sampleRate
-                channel[frame] = Float(sin(2 * .pi * 220 * time) * 0.0001)
+                // Amplituda ~0.004 (~-48 dB): niesłyszalna dla użytkownika, ale
+                // wystarczająco realna, by iOS uznał to za AKTYWNE odtwarzanie i
+                // nie ubijał procesu w tle (sinus na 0.0001 ≈ -80 dB system
+                // traktował jak ciszę i proces stawał się kandydatem do ubicia).
+                channel[frame] = Float(sin(2 * .pi * 220 * time) * 0.004)
             }
         }
 

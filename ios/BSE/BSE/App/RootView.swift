@@ -40,5 +40,8 @@ struct RootView: View {
         .onChange(of: monitor.isReadingEnabled) { isReadingEnabled in
             UIApplication.shared.isIdleTimerDisabled = isReadingEnabled
         }
+        .accessibilityAction(.magicTap) {
+            monitor.toggleReading()
+        }
     }
 }

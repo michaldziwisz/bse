@@ -18,6 +18,7 @@ final class HelmMonitor: ObservableObject {
     private let tonePlayer: TonePlayer
     private let audioSessionController: AudioSessionController
     private let notificationController: SafetyNotificationController
+    private let nowPlayingController: NowPlayingController
 
     private let statusInterval: TimeInterval = 0.5
     private let loopDelayNanoseconds: UInt64 = 100_000_000
@@ -48,14 +49,28 @@ final class HelmMonitor: ObservableObject {
         settingsStore: SettingsStore,
         apiClient: HelmAPIClient = HelmAPIClient(),
         audioSessionController: AudioSessionController,
-        notificationController: SafetyNotificationController
+        notificationController: SafetyNotificationController,
+        nowPlayingController: NowPlayingController = NowPlayingController()
     ) {
         self.settingsStore = settingsStore
         self.apiClient = apiClient
         self.audioSessionController = audioSessionController
         self.notificationController = notificationController
+        self.nowPlayingController = nowPlayingController
         self.speechService = SpeechService(audioSessionController: audioSessionController)
         self.tonePlayer = TonePlayer(audioSessionController: audioSessionController)
+
+        nowPlayingController.onPlay = { [weak self] in
+            guard let self, !self.isReadingEnabled else { return }
+            self.toggleReading()
+        }
+        nowPlayingController.onPause = { [weak self] in
+            guard let self, self.isReadingEnabled else { return }
+            self.toggleReading()
+        }
+        nowPlayingController.onToggle = { [weak self] in
+            self?.toggleReading()
+        }
     }
 
     func start() {
@@ -77,6 +92,7 @@ final class HelmMonitor: ObservableObject {
         speechService.stop()
         tonePlayer.stop()
         audioSessionController.stopKeepAlive()
+        nowPlayingController.markStopped()
         notificationController.clearConnectionLostAlert()
     }
 
@@ -88,6 +104,7 @@ final class HelmMonitor: ObservableObject {
         if isReadingEnabled {
             do {
                 try audioSessionController.startKeepAlive()
+                nowPlayingController.markPlaying()
             } catch {
                 errorMessage = error.localizedDescription
                 isReadingEnabled = false
@@ -99,6 +116,7 @@ final class HelmMonitor: ObservableObject {
             speechService.stop()
             tonePlayer.stop()
             audioSessionController.stopKeepAlive()
+            nowPlayingController.markStopped()
             notificationController.clearConnectionLostAlert()
         }
     }
@@ -123,6 +141,7 @@ final class HelmMonitor: ObservableObject {
         isReadingEnabled = true
         do {
             try audioSessionController.startKeepAlive()
+            nowPlayingController.markPlaying()
         } catch {
             errorMessage = error.localizedDescription
             isReadingEnabled = false

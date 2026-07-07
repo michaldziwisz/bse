@@ -16,11 +16,13 @@ final class AudioSessionController {
     }
 
     func prepareForPlayback() throws {
-        try session.setCategory(
-            .playback,
-            mode: .voicePrompt,
-            options: [.mixWithOthers, .interruptSpokenAudioAndMixWithOthers]
-        )
+        // BEZ .mixWithOthers: aplikacja jest GŁÓWNYM odtwarzaczem, dzięki czemu
+        // iOS pokazuje Now Playing na ekranie blokady i najmocniej chroni proces
+        // przed ubiciem w tle (dźwięk mieszany/ambientowy leci jako pierwszy pod
+        // presją pamięci i nie dostaje sterowania na blokadzie). Kompromis:
+        // włączenie odczytu wyciszy inne audio (muzyka/nawigacja) — na łódce
+        // priorytetem jest, by odczyt steru nie milkł.
+        try session.setCategory(.playback, mode: .voicePrompt)
         try session.setActive(true)
     }
 

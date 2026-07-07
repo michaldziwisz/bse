@@ -199,6 +199,19 @@ struct SettingsView: View {
                         onIncrement: { update(\.rudderAngleCorrection, by: 1, range: -90...90) }
                     )
                 }
+
+                Section {
+                    Picker("Wznawianie odczytu", selection: binding(\.autoResumeMode)) {
+                        ForEach(AutoResumeMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .accessibilityHint("Decyduje, czy po ponownym uruchomieniu aplikacji odczyt włączy się sam.")
+                } header: {
+                    Text("Wznawianie po restarcie")
+                } footer: {
+                    Text("Jeśli system iOS zamknie aplikację w tle podczas dłuższej pracy, po jej ponownym uruchomieniu odczyt jest domyślnie wyłączony — trzeba go włączyć przyciskiem. Ustaw „Zawsze przy starcie”, aby odczyt wracał sam, gdy był włączony przed zamknięciem. Ustaw „Tylko po wznowieniu w tle”, aby wracał sam wyłącznie wtedy, gdy to system wskrzesił aplikację bez Twojego udziału, a przy zwykłym otwarciu czekał na przycisk.")
+                }
             }
             .navigationTitle("Ustawienia")
         }

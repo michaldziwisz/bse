@@ -32,8 +32,10 @@ struct RootView: View {
             }
         }
         .task {
+            let launchedInBackground = UIApplication.shared.applicationState == .background
             monitor.start()
             await monitor.prepareSafetyServices()
+            monitor.resumeIfNeeded(launchedInBackground: launchedInBackground)
         }
         .onChange(of: monitor.isReadingEnabled) { isReadingEnabled in
             UIApplication.shared.isIdleTimerDisabled = isReadingEnabled

@@ -84,6 +84,32 @@ enum TargetMode: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+/// Zachowanie odczytu po ponownym uruchomieniu aplikacji (np. gdy system iOS
+/// ubił proces w tle pod presją pamięci i wznowił go później). Domyślnie
+/// aplikacja NIC nie robi sama — czeka na świadome włączenie odczytu przyciskiem.
+enum AutoResumeMode: String, CaseIterable, Codable, Identifiable {
+    /// Nigdy nie wznawiaj automatycznie (domyślne).
+    case never
+    /// Wznów tylko, gdy system sam wskrzesił aplikację w tle (bez otwierania jej
+    /// przez użytkownika) — po ręcznym otwarciu odczyt czeka na przycisk.
+    case backgroundOnly
+    /// Wznów zawsze przy starcie, jeśli odczyt był włączony w chwili zamknięcia.
+    case always
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .never:
+            return "Nie wznawiaj (domyślnie)"
+        case .backgroundOnly:
+            return "Tylko po wznowieniu w tle"
+        case .always:
+            return "Zawsze przy starcie"
+        }
+    }
+}
+
 struct AppSettings: Codable, Equatable {
     var averageWindow: Int = 3
     var avoidSignalsOverlap: Bool = false
@@ -109,6 +135,7 @@ struct AppSettings: Codable, Equatable {
     var errorRange: Double = 30
     var invertRudderAngle: Bool = false
     var rudderAngleCorrection: Double = 0
+    var autoResumeMode: AutoResumeMode = .never
 
     /// Domyślny host urządzenia BlueSeaEye w trybie access pointa (brama SoftAP).
     static let defaultDeviceHost = "192.168.4.1"
@@ -150,6 +177,7 @@ struct AppSettings: Codable, Equatable {
         errorRange = value(.errorRange, defaults.errorRange)
         invertRudderAngle = value(.invertRudderAngle, defaults.invertRudderAngle)
         rudderAngleCorrection = value(.rudderAngleCorrection, defaults.rudderAngleCorrection)
+        autoResumeMode = value(.autoResumeMode, defaults.autoResumeMode)
     }
 
     /// Adres bazowy API urządzenia zbudowany z `deviceHost`. Akceptuje samo IP

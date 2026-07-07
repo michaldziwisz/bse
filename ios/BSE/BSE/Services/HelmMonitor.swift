@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 @MainActor
 final class HelmMonitor: ObservableObject {
@@ -36,6 +37,13 @@ final class HelmMonitor: ObservableObject {
     private var speechGeneration: UInt64 = 0
     private var isSpeechActive = false
 
+    /// Trwały ślad tego, czy odczyt był włączony. Pozwala wznowić pracę po tym,
+    /// jak iOS ubił proces w tle (presja pamięci) i wskrzesił go później —
+    /// wtedy świeża instancja startuje z isReadingEnabled=false i bez tego
+    /// aplikacja milczałaby mimo że użytkownik wcześniej włączył odczyt.
+    private let readingWasEnabledKey = "bse.readingWasEnabled"
+    private let defaults = UserDefaults.standard
+
     init(
         settingsStore: SettingsStore,
         apiClient: HelmAPIClient = HelmAPIClient(),
@@ -63,6 +71,7 @@ final class HelmMonitor: ObservableObject {
         loopTask = nil
         isPolling = false
         isReadingEnabled = false
+        defaults.set(false, forKey: readingWasEnabledKey)
         speechGeneration += 1
         isSpeechActive = false
         speechService.stop()
@@ -74,6 +83,7 @@ final class HelmMonitor: ObservableObject {
     func toggleReading() {
         isReadingEnabled.toggle()
         errorMessage = nil
+        defaults.set(isReadingEnabled, forKey: readingWasEnabledKey)
 
         if isReadingEnabled {
             do {
@@ -81,6 +91,7 @@ final class HelmMonitor: ObservableObject {
             } catch {
                 errorMessage = error.localizedDescription
                 isReadingEnabled = false
+                defaults.set(false, forKey: readingWasEnabledKey)
             }
         } else {
             speechGeneration += 1
@@ -89,6 +100,32 @@ final class HelmMonitor: ObservableObject {
             tonePlayer.stop()
             audioSessionController.stopKeepAlive()
             notificationController.clearConnectionLostAlert()
+        }
+    }
+
+    /// Wznawia odczyt po ponownym starcie procesu, jeśli był włączony w chwili
+    /// zamknięcia i użytkownik na to pozwolił w ustawieniach. `launchedInBackground`
+    /// mówi, czy aplikacja wstała bez interakcji użytkownika (wskrzeszenie w tle
+    /// przez system po zabiciu procesu) — decyduje o trybie `.backgroundOnly`.
+    func resumeIfNeeded(launchedInBackground: Bool) {
+        guard !isReadingEnabled else { return }
+        guard defaults.bool(forKey: readingWasEnabledKey) else { return }
+
+        switch settingsStore.settings.autoResumeMode {
+        case .never:
+            return
+        case .backgroundOnly:
+            guard launchedInBackground else { return }
+        case .always:
+            break
+        }
+
+        isReadingEnabled = true
+        do {
+            try audioSessionController.startKeepAlive()
+        } catch {
+            errorMessage = error.localizedDescription
+            isReadingEnabled = false
         }
     }
 

@@ -6,29 +6,30 @@ enum AdministrationAction: String {
 }
 
 struct HelmAPIClient {
-    let baseURL: URL
     let session: URLSession
     private let requestTimeout: TimeInterval
 
     init(
-        baseURL: URL = URL(string: "https://blueseaeye.eu/api")!,
         session: URLSession? = nil,
         requestTimeout: TimeInterval = 4
     ) {
-        self.baseURL = baseURL
         self.requestTimeout = requestTimeout
         self.session = session ?? Self.makeDefaultSession(timeout: requestTimeout)
     }
 
     func fetchHelmReadings(settings: AppSettings) async throws -> HelmReadings {
         var components = URLComponents(
-            url: baseURL.appendingPathComponent("helm"),
+            url: settings.deviceBaseURL().appendingPathComponent("helm"),
             resolvingAgainstBaseURL: false
         )!
+        // Kontrakt urządzenia BlueSeaEye (odtworzony z jego wbudowanego
+        // frontendu): parametr czasu nazywa się „time", a „window" to okno
+        // uśredniania w MILISEKUNDACH (averageWindow * 1000). Surowa wartość
+        // 1–5 powoduje na sprzęcie HTTP 400. Pominięcie „window" jest legalne.
         components.queryItems = [
-            URLQueryItem(name: "window", value: String(settings.averageWindow)),
+            URLQueryItem(name: "time", value: String(Int(Date().timeIntervalSince1970 * 1000))),
             URLQueryItem(name: "source", value: settings.courseSource.rawValue),
-            URLQueryItem(name: "t", value: String(Int(Date().timeIntervalSince1970 * 1000)))
+            URLQueryItem(name: "window", value: String(settings.averageWindow * 1000))
         ]
 
         var request = URLRequest(url: components.url!)
@@ -40,8 +41,8 @@ struct HelmAPIClient {
         return try JSONDecoder().decode(HelmReadings.self, from: data)
     }
 
-    func performAdministrationAction(_ action: AdministrationAction) async throws {
-        let url = baseURL.appendingPathComponent(action.rawValue)
+    func performAdministrationAction(_ action: AdministrationAction, settings: AppSettings) async throws {
+        let url = settings.deviceBaseURL().appendingPathComponent(action.rawValue)
         var request = URLRequest(url: url)
         request.timeoutInterval = requestTimeout
         request.cachePolicy = .reloadIgnoringLocalCacheData

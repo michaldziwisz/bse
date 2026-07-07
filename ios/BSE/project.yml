@@ -29,7 +29,6 @@ targets:
       - path: BSE/Resources
     settings:
       base:
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: NO
         PRODUCT_NAME: BSE
     scheme:
       gatherCoverageData: false

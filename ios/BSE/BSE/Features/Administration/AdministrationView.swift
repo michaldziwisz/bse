@@ -8,7 +8,7 @@ struct AdministrationView: View {
         NavigationStack {
             List {
                 Section {
-                    Text("Na podstawie danych z repo aplikacja wspiera także akcje administracyjne urządzenia. Testowy mock może tych endpointów nie udostępniać.")
+                    Text("Aplikacja komunikuje się z urządzeniem BlueSeaEye w jego sieci Wi-Fi. Niektóre egzemplarze mogą nie udostępniać wszystkich akcji administracyjnych – wówczas pojawi się komunikat o błędzie.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

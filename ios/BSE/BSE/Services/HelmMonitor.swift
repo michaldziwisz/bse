@@ -114,7 +114,7 @@ final class HelmMonitor: ObservableObject {
         isBusy = true
         defer { isBusy = false }
         do {
-            try await apiClient.performAdministrationAction(action)
+            try await apiClient.performAdministrationAction(action, settings: settingsStore.settings)
             switch action {
             case .calibrate:
                 adminMessage = "Kalibracja uruchomiona."

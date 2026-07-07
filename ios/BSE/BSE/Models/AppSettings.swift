@@ -88,6 +88,7 @@ struct AppSettings: Codable, Equatable {
     var averageWindow: Int = 3
     var avoidSignalsOverlap: Bool = false
     var courseSource: CourseSource = .cgfa
+    var deviceHost: String = AppSettings.defaultDeviceHost
     var readingDelay: Double = 3
     var readingInterval: Double = 5
     var readingOutput: ReadingOutputMode = .aria
@@ -109,7 +110,65 @@ struct AppSettings: Codable, Equatable {
     var invertRudderAngle: Bool = false
     var rudderAngleCorrection: Double = 0
 
+    /// Domyślny host urządzenia BlueSeaEye w trybie access pointa (brama SoftAP).
+    static let defaultDeviceHost = "192.168.4.1"
+
     static let `default` = AppSettings()
+
+    init() {}
+
+    /// Tolerancyjne dekodowanie: brakujące klucze (np. w ustawieniach zapisanych
+    /// przez starszą wersję aplikacji, sprzed dodania `deviceHost`) przyjmują
+    /// wartości domyślne zamiast unieważniać cały zapis.
+    init(from decoder: Decoder) throws {
+        let defaults = AppSettings()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
+            ((try? container.decodeIfPresent(T.self, forKey: key)) ?? nil) ?? fallback
+        }
+        averageWindow = value(.averageWindow, defaults.averageWindow)
+        avoidSignalsOverlap = value(.avoidSignalsOverlap, defaults.avoidSignalsOverlap)
+        courseSource = value(.courseSource, defaults.courseSource)
+        deviceHost = value(.deviceHost, defaults.deviceHost)
+        readingDelay = value(.readingDelay, defaults.readingDelay)
+        readingInterval = value(.readingInterval, defaults.readingInterval)
+        readingOutput = value(.readingOutput, defaults.readingOutput)
+        readingRate = value(.readingRate, defaults.readingRate)
+        readingVoiceIdentifier = (try? container.decodeIfPresent(String.self, forKey: .readingVoiceIdentifier)) ?? defaults.readingVoiceIdentifier
+        readingVolume = value(.readingVolume, defaults.readingVolume)
+        soundSignalsEnabled = value(.soundSignalsEnabled, defaults.soundSignalsEnabled)
+        toneDelay = value(.toneDelay, defaults.toneDelay)
+        referenceTone = value(.referenceTone, defaults.referenceTone)
+        toneBaseOffset = value(.toneBaseOffset, defaults.toneBaseOffset)
+        toneOnCourse = value(.toneOnCourse, defaults.toneOnCourse)
+        toneType = value(.toneType, defaults.toneType)
+        toneVolume = value(.toneVolume, defaults.toneVolume)
+        broadTonalSpread = value(.broadTonalSpread, defaults.broadTonalSpread)
+        target = value(.target, defaults.target)
+        targetCourse = (try? container.decodeIfPresent(Double.self, forKey: .targetCourse)) ?? defaults.targetCourse
+        errorThreshold = value(.errorThreshold, defaults.errorThreshold)
+        errorRange = value(.errorRange, defaults.errorRange)
+        invertRudderAngle = value(.invertRudderAngle, defaults.invertRudderAngle)
+        rudderAngleCorrection = value(.rudderAngleCorrection, defaults.rudderAngleCorrection)
+    }
+
+    /// Adres bazowy API urządzenia zbudowany z `deviceHost`. Akceptuje samo IP
+    /// lub nazwę hosta, a także pełny URL wpisany przez użytkownika.
+    func deviceBaseURL() -> URL {
+        let trimmed = deviceHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = trimmed.isEmpty ? AppSettings.defaultDeviceHost : trimmed
+        if let url = URL(string: host), url.scheme != nil, url.host != nil {
+            // Pełny URL podany przez użytkownika – uzupełnij o ścieżkę /api,
+            // jeśli jej nie zawiera.
+            if url.path.contains("api") {
+                return url
+            }
+            return url.appendingPathComponent("api")
+        }
+        return URL(string: "http://\(host)/api") ?? AppSettings.fallbackDeviceBaseURL
+    }
+
+    static let fallbackDeviceBaseURL = URL(string: "http://192.168.4.1/api")!
 
     static func resolvedDefault() -> AppSettings {
         var settings = AppSettings()

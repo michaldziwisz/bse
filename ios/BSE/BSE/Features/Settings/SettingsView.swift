@@ -14,6 +14,33 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    HStack {
+                        Text("Adres urządzenia")
+                        Spacer()
+                        TextField(
+                            AppSettings.defaultDeviceHost,
+                            text: deviceHostBinding
+                        )
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+                        .submitLabel(.done)
+                        .accessibilityLabel("Adres urządzenia BlueSeaEye")
+                        .accessibilityHint("Adres IP lub nazwa hosta urządzenia w sieci Wi-Fi. Domyślnie \(AppSettings.defaultDeviceHost).")
+                    }
+
+                    Button("Przywróć domyślny adres") {
+                        settingsStore.update { $0.deviceHost = AppSettings.defaultDeviceHost }
+                    }
+                    .disabled(settingsStore.settings.deviceHost == AppSettings.defaultDeviceHost)
+                } header: {
+                    Text("Urządzenie")
+                } footer: {
+                    Text("Połącz telefon z siecią Wi-Fi „BlueSeaEye” (hasło blueseaeye). Domyślny adres \(AppSettings.defaultDeviceHost) odpowiada urządzeniu w trybie access pointa. Zmień go tylko, jeśli urządzenie pracuje pod innym adresem.")
+                }
+
+                Section {
                     Picker("Sposób odczytu", selection: binding(\.readingOutput)) {
                         ForEach(ReadingOutputMode.allCases) { mode in
                             Text(mode.title).tag(mode)
@@ -183,6 +210,17 @@ struct SettingsView: View {
             set: { newValue in
                 settingsStore.update { settings in
                     settings[keyPath: keyPath] = newValue
+                }
+            }
+        )
+    }
+
+    private var deviceHostBinding: Binding<String> {
+        Binding(
+            get: { settingsStore.settings.deviceHost },
+            set: { newValue in
+                settingsStore.update { settings in
+                    settings.deviceHost = newValue
                 }
             }
         )

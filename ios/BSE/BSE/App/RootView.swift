@@ -1,6 +1,14 @@
 import SwiftUI
 import UIKit
 
+/// Flagi funkcji aplikacji.
+enum FeatureFlags {
+    /// Akcje administracyjne (kalibracja / restart) są na razie ukryte: obecny
+    /// firmware urządzenia BlueSeaEye zwraca dla nich HTTP 404. Ustaw `true`,
+    /// gdy urządzenie zacznie je udostępniać.
+    static let administrationEnabled = false
+}
+
 struct RootView: View {
     @EnvironmentObject private var monitor: HelmMonitor
 
@@ -16,10 +24,12 @@ struct RootView: View {
                     Label("Ustawienia", systemImage: "slider.horizontal.3")
                 }
 
-            AdministrationView()
-                .tabItem {
-                    Label("Administracja", systemImage: "wrench.and.screwdriver")
-                }
+            if FeatureFlags.administrationEnabled {
+                AdministrationView()
+                    .tabItem {
+                        Label("Administracja", systemImage: "wrench.and.screwdriver")
+                    }
+            }
         }
         .task {
             monitor.start()

@@ -5,6 +5,7 @@ struct HelmDashboardView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var monitor: HelmMonitor
     @Environment(\.openURL) private var openURL
+    @State private var crashReasonCopied = false
 
     private var settings: AppSettings { settingsStore.settings }
 
@@ -70,16 +71,34 @@ struct HelmDashboardView: View {
             Text("Powód (do diagnozy): \(reason)")
                 .font(.footnote)
                 .textSelection(.enabled)
-            Button("OK, ukryj") {
-                monitor.lastCrashReason = nil
+            HStack(spacing: 12) {
+                Button("Kopiuj do schowka") {
+                    UIPasteboard.general.string = reason
+                    crashReasonCopied = true
+                    UIAccessibility.post(
+                        notification: .announcement,
+                        argument: "Skopiowano opis błędu do schowka."
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityHint("Kopiuje pełny opis błędu, aby wkleić go w wiadomości.")
+
+                Button("OK, ukryj") {
+                    monitor.lastCrashReason = nil
+                }
+                .buttonStyle(.bordered)
+                .accessibilityHint("Ukrywa informację o poprzednim zamknięciu aplikacji.")
             }
-            .buttonStyle(.bordered)
-            .accessibilityHint("Ukrywa informację o poprzednim zamknięciu aplikacji.")
+            if crashReasonCopied {
+                Text("Skopiowano do schowka.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color.orange.opacity(0.16), in: RoundedRectangle(cornerRadius: 18))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Aplikacja zakończyła się niespodziewanie. Powód: \(reason)")
     }
 

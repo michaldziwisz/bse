@@ -37,7 +37,6 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         if synthesizer.isSpeaking || synthesizer.isPaused {
             synthesizer.stopSpeaking(at: .immediate)
         }
-        rebuildSynthesizer()
     }
 
     func speechSynthesizer(
@@ -57,7 +56,6 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
     private func speakWithRecovery(_ text: String, settings: AppSettings) async {
         let outcome = await speakOnce(text, settings: settings)
         if outcome == .timedOut {
-            rebuildSynthesizer()
             _ = await speakOnce(text, settings: settings)
         }
     }
@@ -65,7 +63,6 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
     private func speakOnce(_ text: String, settings: AppSettings) async -> SpeechOutcome {
         if synthesizer.isSpeaking || synthesizer.isPaused {
             synthesizer.stopSpeaking(at: .immediate)
-            rebuildSynthesizer()
         }
 
         do {

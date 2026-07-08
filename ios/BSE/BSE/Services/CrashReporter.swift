@@ -24,7 +24,10 @@ enum CrashReporter {
 
         for sig in [SIGABRT, SIGILL, SIGSEGV, SIGFPE, SIGBUS, SIGTRAP] {
             signal(sig) { received in
-                CrashReporter.write("Sygnał systemowy nr \(received).")
+                // Ślad stosu wskazuje DOKŁADNIE funkcję, w której nastąpił crash —
+                // kluczowe przy SIGSEGV (błąd pamięci wewnątrz frameworków audio).
+                let stack = Thread.callStackSymbols.prefix(14).joined(separator: "\n")
+                CrashReporter.write("Sygnał systemowy nr \(received).\nŚlad stosu:\n\(stack)")
                 // Przywróć domyślną obsługę i pozwól procesowi zakończyć się,
                 // by nie maskować crasha.
                 signal(received, SIG_DFL)

@@ -19,9 +19,16 @@ final class AudioSessionController {
     private var keepAlivePlayer: AVAudioPlayer?
     private var keepAliveData: Data?
     private(set) var isKeepAliveEnabled = false
+    private var notificationObservers: [NSObjectProtocol] = []
 
     init() {
         observeAudioLifecycle()
+    }
+
+    deinit {
+        for observer in notificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     func prepareForPlayback() throws {
@@ -147,29 +154,51 @@ final class AudioSessionController {
     // MARK: - Reakcja na zdarzenia systemowe audio
 
     private func observeAudioLifecycle() {
-        observe(AVAudioSession.interruptionNotification) { [weak self] notification in
-            await self?.handleInterruption(notification)
-        }
-        observe(AVAudioSession.mediaServicesWereResetNotification) { [weak self] _ in
-            await self?.recoverKeepAliveIfNeeded()
-        }
-        observe(AVAudioSession.routeChangeNotification) { [weak self] _ in
-            await self?.recoverKeepAliveIfNeeded()
-        }
-    }
-
-    private func observe(
-        _ name: Notification.Name,
-        handler: @escaping (Notification) async -> Void
-    ) {
-        Task {
-            for await notification in NotificationCenter.default.notifications(named: name) {
-                await handler(notification)
+        // Klasyczne obserwatory na GŁÓWNEJ kolejce, z zachowanymi tokenami
+        // usuwanymi w deinit. Wcześniej używaliśmy async-strumieni
+        // (NotificationCenter.notifications(named:)) w oderwanych Taskach —
+        // trudniejszych do rozumowania o wątkach/czasie życia. Notyfikacje audio
+        // (przerwanie, zmiana trasy, reset serwera) przychodzą rzadko i losowo,
+        // więc dostarczenie ich wprost na main jest bezpieczniejsze i przewidywalne.
+        let center = NotificationCenter.default
+        notificationObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.interruptionNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                MainActor.assumeIsolated {
+                    self?.handleInterruption(notification)
+                }
             }
-        }
+        )
+        notificationObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.mediaServicesWereResetNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                CrashReporter.breadcrumb("audio: mediaServicesWereReset")
+                MainActor.assumeIsolated {
+                    self?.recoverKeepAliveIfNeeded()
+                }
+            }
+        )
+        notificationObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                CrashReporter.breadcrumb("audio: routeChange")
+                MainActor.assumeIsolated {
+                    self?.recoverKeepAliveIfNeeded()
+                }
+            }
+        )
     }
 
-    private func handleInterruption(_ notification: Notification) async {
+    private func handleInterruption(_ notification: Notification) {
         guard
             let userInfo = notification.userInfo,
             let rawType = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -178,11 +207,12 @@ final class AudioSessionController {
             return
         }
 
+        CrashReporter.breadcrumb("audio: interruption \(type == .began ? "began" : "ended")")
         guard type == .ended else { return }
-        await recoverKeepAliveIfNeeded()
+        recoverKeepAliveIfNeeded()
     }
 
-    private func recoverKeepAliveIfNeeded() async {
+    private func recoverKeepAliveIfNeeded() {
         if isKeepAliveEnabled {
             do {
                 try prepareForPlayback()

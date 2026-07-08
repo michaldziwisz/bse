@@ -101,6 +101,7 @@ final class HelmMonitor: ObservableObject {
         isReadingEnabled.toggle()
         errorMessage = nil
         defaults.set(isReadingEnabled, forKey: readingWasEnabledKey)
+        CrashReporter.breadcrumb("reading: toggle -> \(isReadingEnabled ? "ON" : "OFF")")
 
         if isReadingEnabled {
             do {
@@ -280,6 +281,7 @@ final class HelmMonitor: ObservableObject {
             notificationController.clearConnectionLostAlert()
 
             if recovered, isReadingEnabled {
+                CrashReporter.breadcrumb("connection: recovered")
                 let recoveryMessage = "Połączenie zostało przywrócone."
                 lastAnnouncement = recoveryMessage
                 await speakCritical(recoveryMessage, settings: settings)
@@ -289,6 +291,9 @@ final class HelmMonitor: ObservableObject {
             let shouldAlert = !isConnectionLost
                 || Date().timeIntervalSince(lastConnectionAlertAt) >= connectionAlertRepeatInterval
 
+            if !isConnectionLost {
+                CrashReporter.breadcrumb("connection: lost")
+            }
             isConnectionLost = true
             errorMessage = message
 
@@ -435,6 +440,7 @@ final class HelmMonitor: ObservableObject {
         speechGeneration += 1
         let generation = speechGeneration
         isSpeechActive = true
+        CrashReporter.breadcrumb("speak: „\(text)”")
         await speechService.announce(text, settings: settings)
 
         if speechGeneration == generation {

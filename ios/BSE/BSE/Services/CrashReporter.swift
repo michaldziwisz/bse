@@ -1,4 +1,5 @@
 import Foundation
+import MachO
 
 /// Diagnostyka przyczyny zakończenia aplikacji. Zapisuje do pliku powód
 /// nieoczekiwanego zamknięcia — nieprzechwycony wyjątek Objective-C albo sygnał
@@ -18,22 +19,43 @@ enum CrashReporter {
         NSSetUncaughtExceptionHandler { exception in
             let reason = exception.reason ?? "brak opisu"
             let name = exception.name.rawValue
-            let stack = exception.callStackSymbols.prefix(8).joined(separator: " | ")
-            CrashReporter.write("Wyjątek: \(name) — \(reason). Ślad: \(stack)")
+            let stack = exception.callStackSymbols.prefix(20).joined(separator: "\n")
+            CrashReporter.write("Wyjątek: \(name) — \(reason).\n\(CrashReporter.imageInfo())\nŚlad stosu:\n\(stack)")
         }
 
         for sig in [SIGABRT, SIGILL, SIGSEGV, SIGFPE, SIGBUS, SIGTRAP] {
             signal(sig) { received in
-                // Ślad stosu wskazuje DOKŁADNIE funkcję, w której nastąpił crash —
-                // kluczowe przy SIGSEGV (błąd pamięci wewnątrz frameworków audio).
-                let stack = Thread.callStackSymbols.prefix(14).joined(separator: "\n")
-                CrashReporter.write("Sygnał systemowy nr \(received).\nŚlad stosu:\n\(stack)")
+                // Pełny ślad + adres bazowy obrazu = możliwość offline symbolizacji
+                // z dSYM (atos). Bez adresu bazowego same adresy z callStackSymbols
+                // są bezużyteczne po restarcie (ASLR).
+                let stack = Thread.callStackSymbols.prefix(24).joined(separator: "\n")
+                CrashReporter.write("Sygnał systemowy nr \(received).\n\(CrashReporter.imageInfo())\nŚlad stosu:\n\(stack)")
                 // Przywróć domyślną obsługę i pozwól procesowi zakończyć się,
                 // by nie maskować crasha.
                 signal(received, SIG_DFL)
                 raise(received)
             }
         }
+    }
+
+    /// Adres załadowania i slide ASLR głównego obrazu (BSE) oraz wersja — bez tego
+    /// nie da się przeliczyć adresów ze śladu na linie kodu przy użyciu dSYM.
+    private static func imageInfo() -> String {
+        var info = "Obraz: nieznany"
+        let count = _dyld_image_count()
+        for i in 0..<count {
+            guard let namePtr = _dyld_get_image_name(i) else { continue }
+            let name = String(cString: namePtr)
+            if name.hasSuffix("/BSE") || name.hasSuffix(".app/BSE") {
+                let slide = _dyld_get_image_vmaddr_slide(i)
+                let base = _dyld_get_image_header(i)
+                let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+                let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                info = "Obraz BSE: base=\(base) slide=0x\(String(slide, radix: 16)) wersja=\(version) (\(build))"
+                break
+            }
+        }
+        return info
     }
 
     /// Odczytuje i USUWA zapisany powód ostatniego zamknięcia (jeśli był).

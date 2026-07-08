@@ -150,14 +150,18 @@ final class HelmMonitor: ObservableObject {
     }
 
     /// Jeśli poprzednie uruchomienie zakończyło się crashem, udostępnia jego
-    /// powód (do pokazania i odczytania głosem) — twardy dowód przyczyny zamiast
-    /// zgadywania. Wołać raz przy starcie.
+    /// powód na banerze (do skopiowania). NIE czyta pełnego opisu własnym
+    /// syntezatorem — przy aktywnym VoiceOverze taki wymuszony komunikat nakładał
+    /// się na czytnik i nie dało się go uciszyć. Zamiast tego krótkie, przerywalne
+    /// ogłoszenie VoiceOver (gdy działa); pełny ślad zostaje na ekranie.
     func reportPreviousCrashIfAny() async {
         guard let reason = CrashReporter.consumeLastCrashReason() else { return }
         lastCrashReason = reason
-        let spoken = "Uwaga. Poprzednim razem aplikacja zakończyła się niespodziewanie. Powód: \(reason)"
-        lastAnnouncement = spoken
-        await speakCritical(spoken, settings: settingsStore.settings)
+        let notice = "Poprzednim razem aplikacja zamknęła się niespodziewanie. Szczegóły do skopiowania są na ekranie Ster."
+        lastAnnouncement = notice
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(notification: .announcement, argument: notice)
+        }
     }
 
     func holdCurrentCourse() {

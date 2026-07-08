@@ -39,18 +39,25 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         }
     }
 
-    func speechSynthesizer(
+    nonisolated func speechSynthesizer(
         _ synthesizer: AVSpeechSynthesizer,
         didFinish utterance: AVSpeechUtterance
     ) {
-        completeCurrentSpeech(with: .finished)
+        // iOS potrafi wołać delegata z wątku w tle. Cały dostęp do stanu
+        // (continuation, timeoutTask) MUSI iść przez MainActor — inaczej wyścig
+        // danych z timeoutem kończy się podwójnym resume i SIGSEGV.
+        Task { @MainActor [weak self] in
+            self?.completeCurrentSpeech(with: .finished)
+        }
     }
 
-    func speechSynthesizer(
+    nonisolated func speechSynthesizer(
         _ synthesizer: AVSpeechSynthesizer,
         didCancel utterance: AVSpeechUtterance
     ) {
-        completeCurrentSpeech(with: .cancelled)
+        Task { @MainActor [weak self] in
+            self?.completeCurrentSpeech(with: .cancelled)
+        }
     }
 
     private func speakWithRecovery(_ text: String, settings: AppSettings) async {

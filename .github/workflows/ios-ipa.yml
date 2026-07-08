@@ -51,3 +51,10 @@ jobs:
           name: BSE-ipa
           path: ios/BSE/build/BSE.ipa
           if-no-files-found: error
+
+      - name: Upload dSYM (do symbolizacji crashy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BSE-dSYM
+          path: ios/BSE/build/BSE.xcarchive/dSYMs
+          if-no-files-found: warn

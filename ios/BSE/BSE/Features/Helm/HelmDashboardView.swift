@@ -12,6 +12,9 @@ struct HelmDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    if let crashReason = monitor.lastCrashReason {
+                        crashReportSection(crashReason)
+                    }
                     if monitor.isConnectionLost {
                         connectionWarningSection
                     }
@@ -58,6 +61,26 @@ struct HelmDashboardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func crashReportSection(_ reason: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Aplikacja zakończyła się niespodziewanie")
+                .font(.headline)
+            Text("Powód (do diagnozy): \(reason)")
+                .font(.footnote)
+                .textSelection(.enabled)
+            Button("OK, ukryj") {
+                monitor.lastCrashReason = nil
+            }
+            .buttonStyle(.bordered)
+            .accessibilityHint("Ukrywa informację o poprzednim zamknięciu aplikacji.")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.orange.opacity(0.16), in: RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Aplikacja zakończyła się niespodziewanie. Powód: \(reason)")
     }
 
     private var connectionWarningSection: some View {

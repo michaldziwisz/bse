@@ -11,6 +11,7 @@ final class HelmMonitor: ObservableObject {
     @Published var errorMessage: String?
     @Published var adminMessage: String?
     @Published var isBusy = false
+    @Published var lastCrashReason: String?
 
     private let settingsStore: SettingsStore
     private let apiClient: HelmAPIClient
@@ -146,6 +147,17 @@ final class HelmMonitor: ObservableObject {
             errorMessage = error.localizedDescription
             isReadingEnabled = false
         }
+    }
+
+    /// Jeśli poprzednie uruchomienie zakończyło się crashem, udostępnia jego
+    /// powód (do pokazania i odczytania głosem) — twardy dowód przyczyny zamiast
+    /// zgadywania. Wołać raz przy starcie.
+    func reportPreviousCrashIfAny() async {
+        guard let reason = CrashReporter.consumeLastCrashReason() else { return }
+        lastCrashReason = reason
+        let spoken = "Uwaga. Poprzednim razem aplikacja zakończyła się niespodziewanie. Powód: \(reason)"
+        lastAnnouncement = spoken
+        await speakCritical(spoken, settings: settingsStore.settings)
     }
 
     func holdCurrentCourse() {

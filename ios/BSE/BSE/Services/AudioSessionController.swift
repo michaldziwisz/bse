@@ -1,40 +1,47 @@
 import AVFoundation
 import Foundation
 
+/// Podtrzymuje aktywną sesję audio, aby odczyt steru (mowa i tony) działał
+/// nieprzerwanie także przy zgaszonym ekranie i w tle.
+///
+/// UWAGA PROJEKTOWA: świadomie NIE używamy AVAudioEngine. Po wielu godzinach
+/// pracy AVAudioEngine potrafi — przy zmianie trasy audio, zmianie konfiguracji
+/// lub resecie serwera mediów — rzucić wyjątek Objective-C, którego w Swift NIE
+/// da się przechwycić przez try/catch, co kończy się TWARDYM crashem całej
+/// aplikacji. To był najprawdopodobniejszy powód, dla którego aplikacja „wywalała
+/// się” po godzinie–trzech. Zamiast tego gramy zapętlony, bardzo cichy bufor przez
+/// zwykły AVAudioPlayer, który jest odporny na te sytuacje (tak robią stabilne
+/// odtwarzacze działające godzinami).
 @MainActor
 final class AudioSessionController {
     private let session = AVAudioSession.sharedInstance()
-    private var keepAliveEngine = AVAudioEngine()
-    private var keepAlivePlayer = AVAudioPlayerNode()
-    private let sampleRate = 44_100.0
-    private var keepAliveBuffer: AVAudioPCMBuffer?
+    private let sampleRate = 44_100
+    private var keepAlivePlayer: AVAudioPlayer?
+    private var keepAliveData: Data?
     private(set) var isKeepAliveEnabled = false
 
     init() {
-        buildEngine()
         observeAudioLifecycle()
     }
 
     func prepareForPlayback() throws {
         // BEZ .mixWithOthers: aplikacja jest GŁÓWNYM odtwarzaczem, dzięki czemu
         // iOS pokazuje Now Playing na ekranie blokady i najmocniej chroni proces
-        // przed ubiciem w tle (dźwięk mieszany/ambientowy leci jako pierwszy pod
-        // presją pamięci i nie dostaje sterowania na blokadzie). Kompromis:
-        // włączenie odczytu wyciszy inne audio (muzyka/nawigacja) — na łódce
-        // priorytetem jest, by odczyt steru nie milkł.
+        // przed ubiciem w tle. Kompromis: włączenie odczytu wyciszy inne audio
+        // (muzyka/nawigacja) — na łódce priorytetem jest, by odczyt steru nie milkł.
         try session.setCategory(.playback, mode: .voicePrompt)
         try session.setActive(true)
     }
 
     func startKeepAlive() throws {
         try prepareForPlayback()
-        try startEngineAndLoop()
+        try startLoopingTone()
         isKeepAliveEnabled = true
     }
 
     func stopKeepAlive() {
-        keepAlivePlayer.stop()
-        keepAliveEngine.pause()
+        keepAlivePlayer?.stop()
+        keepAlivePlayer = nil
         isKeepAliveEnabled = false
         do {
             try session.setActive(false, options: [.notifyOthersOnDeactivation])
@@ -43,88 +50,98 @@ final class AudioSessionController {
         }
     }
 
-    /// Watchdog: wywoływane cyklicznie z pętli monitora. Jeśli podtrzymanie
-    /// powinno działać, a silnik/odtwarzacz z jakiegokolwiek powodu zamilkł
-    /// (reset mediaserverd, zmiana konfiguracji, uśpienie), wskrzesza dźwięk.
-    /// Dzięki temu apka nie milknie na trwałe po wielu godzinach pracy.
+    /// Watchdog wołany cyklicznie z pętli monitora. Jeśli podtrzymanie powinno
+    /// działać, a odtwarzacz z jakiegokolwiek powodu przestał grać, wznawia go.
+    /// AVAudioPlayer nie unieważnia się jak AVAudioEngine, więc zwykle wystarcza
+    /// samo `play()`, a w razie potrzeby odtwarzacz jest tworzony od nowa.
     func ensureKeepAliveRunning() {
         guard isKeepAliveEnabled else { return }
-        if keepAliveEngine.isRunning && keepAlivePlayer.isPlaying {
+        if let player = keepAlivePlayer, player.isPlaying {
             return
         }
         do {
             try prepareForPlayback()
-            try startEngineAndLoop()
+            if let player = keepAlivePlayer {
+                player.play()
+                if player.isPlaying { return }
+            }
+            try startLoopingTone()
         } catch {
-            // Silnik mógł zostać unieważniony (np. mediaServicesWereReset) -
-            // odbuduj go od zera i spróbuj ponownie.
-            rebuildEngine()
-            do {
-                try prepareForPlayback()
-                try startEngineAndLoop()
-            } catch {
-                return
-            }
+            return
         }
     }
 
-    // MARK: - Silnik podtrzymania
+    // MARK: - Zapętlony cichy ton (AVAudioPlayer)
 
-    private func buildEngine() {
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
-        keepAliveEngine.attach(keepAlivePlayer)
-        keepAliveEngine.connect(keepAlivePlayer, to: keepAliveEngine.mainMixerNode, format: format)
+    private func startLoopingTone() throws {
+        let data = try keepAliveToneData()
+        // Odtwórz od nowa: nowy odtwarzacz jest tani i całkowicie unika stanów
+        // pośrednich starego (pauza/uszkodzony bufor).
+        keepAlivePlayer?.stop()
+        let player = try AVAudioPlayer(data: data)
+        player.numberOfLoops = -1 // nieskończona pętla
+        player.volume = 1
+        player.prepareToPlay()
+        keepAlivePlayer = player
+        player.play()
     }
 
-    /// Po resecie serwera mediów wszystkie obiekty audio są martwe - trzeba je
-    /// stworzyć na nowo, inaczej engine.start() nie przywróci dźwięku.
-    private func rebuildEngine() {
-        keepAlivePlayer.stop()
-        keepAliveEngine.stop()
-        keepAliveEngine = AVAudioEngine()
-        keepAlivePlayer = AVAudioPlayerNode()
-        keepAliveBuffer = nil
-        buildEngine()
+    private func keepAliveToneData() throws -> Data {
+        if let keepAliveData {
+            return keepAliveData
+        }
+
+        // 1 sekunda cichego sinusa 220 Hz. Amplituda ~0.004 (~-48 dB): niesłyszalna
+        // dla użytkownika, ale „realna” dla systemu, więc iOS traktuje aplikację
+        // jako aktywnie odtwarzającą.
+        let frameCount = sampleRate
+        var pcm = Data(capacity: frameCount * MemoryLayout<Int16>.size)
+        let amplitude = 0.004
+        for frame in 0..<frameCount {
+            let time = Double(frame) / Double(sampleRate)
+            let value = sin(2 * .pi * 220 * time) * amplitude
+            var sample = Int16(max(min(value * Double(Int16.max), Double(Int16.max)), Double(Int16.min)))
+                .littleEndian
+            pcm.append(Data(bytes: &sample, count: MemoryLayout<Int16>.size))
+        }
+
+        let data = makeWaveFile(fromPCM: pcm, channels: 1, sampleRate: sampleRate, bitsPerSample: 16)
+        keepAliveData = data
+        return data
     }
 
-    private func startEngineAndLoop() throws {
-        if !keepAliveEngine.isRunning {
-            try keepAliveEngine.start()
-        }
+    private func makeWaveFile(
+        fromPCM pcmData: Data,
+        channels: UInt16,
+        sampleRate: Int,
+        bitsPerSample: UInt16
+    ) -> Data {
+        let byteRate = UInt32(sampleRate) * UInt32(channels) * UInt32(bitsPerSample) / 8
+        let blockAlign = channels * bitsPerSample / 8
+        let dataSize = UInt32(pcmData.count)
+        let riffSize = 36 + dataSize
 
-        let buffer = try makeKeepAliveBuffer()
-        keepAlivePlayer.stop()
-        keepAlivePlayer.volume = 1
-        keepAlivePlayer.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
-        keepAlivePlayer.play()
+        var data = Data()
+        data.append("RIFF".data(using: .ascii)!)
+        append(riffSize, to: &data)
+        data.append("WAVE".data(using: .ascii)!)
+        data.append("fmt ".data(using: .ascii)!)
+        append(UInt32(16), to: &data)
+        append(UInt16(1), to: &data)
+        append(channels, to: &data)
+        append(UInt32(sampleRate), to: &data)
+        append(byteRate, to: &data)
+        append(blockAlign, to: &data)
+        append(bitsPerSample, to: &data)
+        data.append("data".data(using: .ascii)!)
+        append(dataSize, to: &data)
+        data.append(pcmData)
+        return data
     }
 
-    private func makeKeepAliveBuffer() throws -> AVAudioPCMBuffer {
-        if let keepAliveBuffer {
-            return keepAliveBuffer
-        }
-
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
-        let frameCount = AVAudioFrameCount(sampleRate)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            throw AudioSessionError.bufferCreationFailed
-        }
-
-        buffer.frameLength = frameCount
-        if let channel = buffer.floatChannelData?[0] {
-            let totalFrames = Int(frameCount)
-            for frame in 0..<totalFrames {
-                let time = Double(frame) / sampleRate
-                // Amplituda ~0.004 (~-48 dB): niesłyszalna dla użytkownika, ale
-                // wystarczająco realna, by iOS uznał to za AKTYWNE odtwarzanie i
-                // nie ubijał procesu w tle (sinus na 0.0001 ≈ -80 dB system
-                // traktował jak ciszę i proces stawał się kandydatem do ubicia).
-                channel[frame] = Float(sin(2 * .pi * 220 * time) * 0.004)
-            }
-        }
-
-        keepAliveBuffer = buffer
-        return buffer
+    private func append<T: FixedWidthInteger>(_ value: T, to data: inout Data) {
+        var littleEndian = value.littleEndian
+        data.append(Data(bytes: &littleEndian, count: MemoryLayout<T>.size))
     }
 
     // MARK: - Reakcja na zdarzenia systemowe audio
@@ -134,12 +151,9 @@ final class AudioSessionController {
             await self?.handleInterruption(notification)
         }
         observe(AVAudioSession.mediaServicesWereResetNotification) { [weak self] _ in
-            await self?.handleMediaServicesReset()
-        }
-        observe(AVAudioSession.routeChangeNotification) { [weak self] _ in
             await self?.recoverKeepAliveIfNeeded()
         }
-        observe(.AVAudioEngineConfigurationChange) { [weak self] _ in
+        observe(AVAudioSession.routeChangeNotification) { [weak self] _ in
             await self?.recoverKeepAliveIfNeeded()
         }
     }
@@ -168,15 +182,14 @@ final class AudioSessionController {
         await recoverKeepAliveIfNeeded()
     }
 
-    /// Reset mediaserverd unieważnia CAŁY stos audio - odbuduj silnik i wznów.
-    private func handleMediaServicesReset() async {
-        rebuildEngine()
-        await recoverKeepAliveIfNeeded()
-    }
-
     private func recoverKeepAliveIfNeeded() async {
         if isKeepAliveEnabled {
-            ensureKeepAliveRunning()
+            do {
+                try prepareForPlayback()
+                try startLoopingTone()
+            } catch {
+                return
+            }
         } else {
             try? prepareForPlayback()
         }

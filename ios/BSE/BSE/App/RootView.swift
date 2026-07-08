@@ -35,6 +35,7 @@ struct RootView: View {
             let launchedInBackground = UIApplication.shared.applicationState == .background
             monitor.start()
             await monitor.prepareSafetyServices()
+            await monitor.reportPreviousCrashIfAny()
             monitor.resumeIfNeeded(launchedInBackground: launchedInBackground)
         }
         .onChange(of: monitor.isReadingEnabled) { isReadingEnabled in

@@ -7,6 +7,7 @@ struct BSEApp: App {
     @StateObject private var monitor: HelmMonitor
 
     init() {
+        CrashReporter.install()
         let settingsStore = SettingsStore()
         let audioSessionController = AudioSessionController()
         let notificationController = SafetyNotificationController()

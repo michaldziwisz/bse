@@ -27,6 +27,7 @@ final class TonePlayer {
             try audioSessionController.prepareForPlayback()
             stop()
 
+            CrashReporter.breadcrumb("tone: play \(Int(frequency))Hz")
             let toneData = try makeToneData(
                 frequency: frequency,
                 duration: duration,
@@ -39,11 +40,12 @@ final class TonePlayer {
             player.prepareToPlay()
             guard player.play() else { return }
             activePlayer = player
-
-            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-            if activePlayer === player {
-                activePlayer = nil
-            }
+            // NIE zwalniamy odtwarzacza z opóźnionego Taska (dawniej: sleep +
+            // wyzerowanie activePlayer). Przy tysiącach tonów na godzinę zwolnienie
+            // AVAudioPlayer, gdy jego wewnętrzny timer/callback jest jeszcze
+            // zaplanowany na głównej pętli, powodowało użycie zwolnionej pamięci
+            // (SIGSEGV, SEGV_ACCERR w calloucie timera). Odtwarzacz gra swój krótki
+            // bufor i zostaje zwolniony dopiero przy następnym play() lub stop().
         } catch {
             return
         }
@@ -52,15 +54,19 @@ final class TonePlayer {
     func playAlertPattern(volume: Double, waveform: ToneWaveform) async {
         let alertVolume = max(volume, 0.85)
         let frequencies: [Double] = [1320, 880, 1320]
+        let toneDuration: TimeInterval = 0.22
 
         for frequency in frequencies {
             await play(
                 frequency: frequency,
-                duration: 0.22,
+                duration: toneDuration,
                 volume: alertVolume,
                 waveform: waveform
             )
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            // play() wraca natychmiast (nie zwalnia już odtwarzacza przez sleep),
+            // więc odczekaj czas trwania tonu + przerwę, aby tony nie zlały się
+            // w jeden — odstęp mierzymy tu, w wołającym, bez dotykania odtwarzacza.
+            try? await Task.sleep(nanoseconds: UInt64((toneDuration + 0.1) * 1_000_000_000))
         }
     }
 

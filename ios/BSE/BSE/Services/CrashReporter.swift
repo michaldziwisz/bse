@@ -24,19 +24,24 @@ enum CrashReporter {
         }
 
         for sig in [SIGABRT, SIGILL, SIGSEGV, SIGFPE, SIGBUS, SIGTRAP] {
-            signal(sig) { received in
-                // Pełny ślad + adres bazowy obrazu = możliwość offline symbolizacji
-                // z dSYM (atos). Bez adresu bazowego same adresy z callStackSymbols
-                // są bezużyteczne po restarcie (ASLR). Breadcrumbs pokazują CO
-                // aplikacja robiła tuż przed awarią — kluczowe gdy stos to same
-                // ramki systemowe bez naszego kodu.
+            var action = sigaction()
+            action.sa_flags = Int32(SA_SIGINFO)
+            action.__sigaction_u.__sa_sigaction = { received, info, _ in
+                // SA_SIGINFO daje adres błędnego dostępu (si_addr) i kod błędu —
+                // rozróżnia odwołanie do ZWOLNIONEGO obiektu (adres w stercie) od
+                // null/innego. Plus pełny ślad, adres bazowy obrazu (ASLR) i
+                // breadcrumbs (CO robiła apka tuż przed).
+                let faultAddr = info?.pointee.si_addr
+                let code = info?.pointee.si_code ?? 0
+                let addrText = faultAddr.map { String(UInt(bitPattern: $0), radix: 16, uppercase: false) }
+                    .map { "0x" + $0 } ?? "?"
                 let stack = Thread.callStackSymbols.prefix(24).joined(separator: "\n")
-                CrashReporter.write("Sygnał systemowy nr \(received).\n\(CrashReporter.imageInfo())\nOstatnie zdarzenia:\n\(CrashReporter.breadcrumbsSnapshot())\nŚlad stosu:\n\(stack)")
-                // Przywróć domyślną obsługę i pozwól procesowi zakończyć się,
-                // by nie maskować crasha.
+                CrashReporter.write("Sygnał systemowy nr \(received) (si_code=\(code), błędny adres=\(addrText)).\n\(CrashReporter.imageInfo())\nOstatnie zdarzenia:\n\(CrashReporter.breadcrumbsSnapshot())\nŚlad stosu:\n\(stack)")
                 signal(received, SIG_DFL)
                 raise(received)
             }
+            sigemptyset(&action.sa_mask)
+            sigaction(sig, &action, nil)
         }
     }
 

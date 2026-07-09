@@ -20,8 +20,10 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
             && UIApplication.shared.applicationState == .active
 
         if shouldUseAccessibilityAnnouncement {
+            CrashReporter.breadcrumb("speech: post VoiceOver announcement")
             UIAccessibility.post(notification: .announcement, argument: text)
         } else {
+            CrashReporter.breadcrumb("speech: synthesizer speak")
             await speakWithRecovery(text, settings: settings)
         }
     }
@@ -47,6 +49,7 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         // (continuation, timeoutTask) MUSI iść przez MainActor — inaczej wyścig
         // danych z timeoutem kończy się podwójnym resume i SIGSEGV.
         Task { @MainActor [weak self] in
+            CrashReporter.breadcrumb("speech: didFinish")
             self?.completeCurrentSpeech(with: .finished)
         }
     }
@@ -56,6 +59,7 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         didCancel utterance: AVSpeechUtterance
     ) {
         Task { @MainActor [weak self] in
+            CrashReporter.breadcrumb("speech: didCancel")
             self?.completeCurrentSpeech(with: .cancelled)
         }
     }

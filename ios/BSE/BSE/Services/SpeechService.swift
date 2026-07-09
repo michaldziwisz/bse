@@ -86,7 +86,13 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         utterance.voice = voice(for: settings.readingVoiceIdentifier)
         utterance.volume = Float(settings.readingVolume / 100)
         utterance.rate = mapRate(fromPercent: settings.readingRate)
-        utterance.prefersAssistiveTechnologySettings = true
+        // NIE ustawiamy prefersAssistiveTechnologySettings. Ta flaga kieruje
+        // wypowiedź przez kanał mowy technologii wspomagającej (VoiceOver) i po
+        // wielu godzinach pracy prowadzi do użycia zwolnionej pamięci (SIGSEGV,
+        // SEGV_ACCERR w calloucie timera na głównej pętli — potwierdzone z
+        // breadcrumbs: crash na ścieżce „synthesizer speak” przy włączonym
+        // VoiceOverze). Bez niej mówimy własnym, stabilnym głosem, a VoiceOver
+        // działa dalej normalnie.
 
         let timeout = speechTimeout(for: text, settings: settings)
 

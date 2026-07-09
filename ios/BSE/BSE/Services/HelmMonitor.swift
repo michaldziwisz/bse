@@ -369,13 +369,21 @@ final class HelmMonitor: ObservableObject {
             let gain = delta > 0 ? 1.0 : -1.0
             let multiplier = settings.broadTonalSpread ? 2.0 : 1.0
             if settings.referenceTone {
+                let referenceToneDuration: TimeInterval = 0.08
                 await tonePlayer.play(
                     frequency: frequencyMid,
-                    duration: 0.08,
+                    duration: referenceToneDuration,
                     volume: settings.toneVolume / 100,
                     waveform: settings.toneType
                 )
-                try? await Task.sleep(nanoseconds: 20_000_000)
+                // play() wraca natychmiast (nie zwalnia już odtwarzacza przez
+                // sleep), więc odczekaj pełny czas trwania tonu referencyjnego
+                // plus krótką przerwę, ZANIM zagramy ton odchyłki — inaczej
+                // kolejny play() wywoła stop() i urwie ton referencyjny po ~20 ms
+                // (zgłoszone: pierwszy ton był krótszy niż wcześniej).
+                try? await Task.sleep(
+                    nanoseconds: UInt64((referenceToneDuration + 0.04) * 1_000_000_000)
+                )
             }
             let baseOffset = settings.toneBaseOffset / 12
             let frequency = frequencyMid * pow(

@@ -86,13 +86,14 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
         utterance.voice = voice(for: settings.readingVoiceIdentifier)
         utterance.volume = Float(settings.readingVolume / 100)
         utterance.rate = mapRate(fromPercent: settings.readingRate)
-        // NIE ustawiamy prefersAssistiveTechnologySettings. Ta flaga kieruje
-        // wypowiedź przez kanał mowy technologii wspomagającej (VoiceOver) i po
-        // wielu godzinach pracy prowadzi do użycia zwolnionej pamięci (SIGSEGV,
-        // SEGV_ACCERR w calloucie timera na głównej pętli — potwierdzone z
-        // breadcrumbs: crash na ścieżce „synthesizer speak” przy włączonym
-        // VoiceOverze). Bez niej mówimy własnym, stabilnym głosem, a VoiceOver
-        // działa dalej normalnie.
+        // Kieruj wypowiedź przez ustawienia mowy technologii wspomagającej
+        // (VoiceOver): głos i tempo VoiceOvera, działa też na zablokowanym
+        // ekranie. TO JEST oczekiwane zachowanie (mowa „głosem VO”).
+        // Wcześniej podejrzewaliśmy tę flagę o SIGSEGV i ją usunęliśmy
+        // (commit 19baaa8), ale crash WRÓCIŁ identyczny — prawdziwą przyczyną
+        // był churn w TonePlayerze (zwalnianie AVAudioPlayera z opóźnionego
+        // taska, naprawione w 1745ec6). Flaga była niewinna, więc przywrócona.
+        utterance.prefersAssistiveTechnologySettings = true
 
         let timeout = speechTimeout(for: text, settings: settings)
 

@@ -70,6 +70,12 @@ struct CompassCardView: View {
         .frame(maxWidth: .infinity)
         .aspectRatio(1, contentMode: .fit)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(snapshot?.accessibilitySummary(using: settings) ?? "Brak bieżących odczytów")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        guard let snapshot else { return "Brak bieżących odczytów" }
+        let reading = snapshot.spokenReading(using: settings)
+        return reading.isEmpty ? "Brak bieżących odczytów" : reading
     }
 }

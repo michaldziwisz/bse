@@ -105,6 +105,7 @@ struct SettingsView: View {
                     Toggle("Odtwarzaj sygnały dźwiękowe", isOn: binding(\.soundSignalsEnabled))
                     Toggle("Odtwarzaj ton referencyjny", isOn: binding(\.referenceTone))
                     Toggle("Odtwarzaj ton na zadanym kursie", isOn: binding(\.toneOnCourse))
+                    Toggle("Krótsze sygnały", isOn: binding(\.shortTones))
                     Toggle("Szeroka rozpiętość tonów", isOn: binding(\.broadTonalSpread))
 
                     Picker("Typ dźwięku", selection: binding(\.toneType)) {

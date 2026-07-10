@@ -189,6 +189,25 @@ struct HelmDashboardView: View {
                     .disabled(monitor.snapshot?.course == nil)
                     .accessibilityHint("Zapisuje aktualny kurs jako docelowy.")
                 }
+            } else if settings.target == .wind {
+                VStack(alignment: .leading, spacing: 12) {
+                    NumericSettingRow(
+                        title: "Zadany kąt do wiatru",
+                        valueText: targetWindText,
+                        decrementLabel: "Zmniejsz zadany kąt do wiatru",
+                        incrementLabel: "Zwiększ zadany kąt do wiatru",
+                        hint: "Zmiana co 1 stopień.",
+                        onDecrement: { updateTargetWind(by: -1) },
+                        onIncrement: { updateTargetWind(by: 1) }
+                    )
+
+                    Button("Ustaw aktualny kąt do wiatru") {
+                        monitor.holdCurrentWind()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(monitor.snapshot?.wind == nil)
+                    .accessibilityHint("Zapisuje aktualny kąt do wiatru jako docelowy.")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -237,16 +256,28 @@ struct HelmDashboardView: View {
         String(format: "%03.0f°", settings.targetCourse ?? 0)
     }
 
+    private var targetWindText: String {
+        String(format: "%03.0f°", settings.targetWind ?? 0)
+    }
+
     private var targetBinding: Binding<TargetMode> {
         Binding(
             get: { settingsStore.settings.target },
             set: { newValue in
                 settingsStore.update { settings in
                     settings.target = newValue
-                    if newValue == .none {
+                    switch newValue {
+                    case .none:
                         settings.targetCourse = nil
-                    } else if settings.targetCourse == nil {
-                        settings.targetCourse = HelmMath.normalizedCourse(monitor.snapshot?.course ?? 0)
+                        settings.targetWind = nil
+                    case .course:
+                        if settings.targetCourse == nil {
+                            settings.targetCourse = HelmMath.normalizedCourse(monitor.snapshot?.course ?? 0)
+                        }
+                    case .wind:
+                        if settings.targetWind == nil {
+                            settings.targetWind = HelmMath.normalizedCourse(monitor.snapshot?.wind ?? 0)
+                        }
                     }
                 }
             }
@@ -268,6 +299,13 @@ struct HelmDashboardView: View {
         settingsStore.update { settings in
             let current = settings.targetCourse ?? HelmMath.normalizedCourse(monitor.snapshot?.course ?? 0)
             settings.targetCourse = HelmMath.normalizedCourse(current + delta)
+        }
+    }
+
+    private func updateTargetWind(by delta: Double) {
+        settingsStore.update { settings in
+            let current = settings.targetWind ?? HelmMath.normalizedCourse(monitor.snapshot?.wind ?? 0)
+            settings.targetWind = HelmMath.normalizedCourse(current + delta)
         }
     }
 }

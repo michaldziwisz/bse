@@ -71,6 +71,7 @@ enum ToneWaveform: String, CaseIterable, Codable, Identifiable {
 enum TargetMode: String, CaseIterable, Codable, Identifiable {
     case none
     case course
+    case wind
 
     var id: String { rawValue }
 
@@ -80,6 +81,8 @@ enum TargetMode: String, CaseIterable, Codable, Identifiable {
             return "Kurs"
         case .course:
             return "Odchyłka od zadanego kursu"
+        case .wind:
+            return "Odchyłka od kąta do wiatru"
         }
     }
 }
@@ -128,9 +131,11 @@ struct AppSettings: Codable, Equatable {
     var toneOnCourse: Bool = true
     var toneType: ToneWaveform = .triangle
     var toneVolume: Double = 25
+    var shortTones: Bool = true
     var broadTonalSpread: Bool = false
     var target: TargetMode = .none
     var targetCourse: Double?
+    var targetWind: Double?
     var errorThreshold: Double = 1
     var errorRange: Double = 30
     var invertRudderAngle: Bool = false
@@ -170,9 +175,11 @@ struct AppSettings: Codable, Equatable {
         toneOnCourse = value(.toneOnCourse, defaults.toneOnCourse)
         toneType = value(.toneType, defaults.toneType)
         toneVolume = value(.toneVolume, defaults.toneVolume)
+        shortTones = value(.shortTones, defaults.shortTones)
         broadTonalSpread = value(.broadTonalSpread, defaults.broadTonalSpread)
         target = value(.target, defaults.target)
         targetCourse = (try? container.decodeIfPresent(Double.self, forKey: .targetCourse)) ?? defaults.targetCourse
+        targetWind = (try? container.decodeIfPresent(Double.self, forKey: .targetWind)) ?? defaults.targetWind
         errorThreshold = value(.errorThreshold, defaults.errorThreshold)
         errorRange = value(.errorRange, defaults.errorRange)
         invertRudderAngle = value(.invertRudderAngle, defaults.invertRudderAngle)
@@ -224,6 +231,10 @@ struct AppSettings: Codable, Equatable {
         rudderAngleCorrection = min(max(rudderAngleCorrection, -90), 90)
         if let targetCourse {
             self.targetCourse = ((targetCourse.rounded().truncatingRemainder(dividingBy: 360)) + 360)
+                .truncatingRemainder(dividingBy: 360)
+        }
+        if let targetWind {
+            self.targetWind = ((targetWind.rounded().truncatingRemainder(dividingBy: 360)) + 360)
                 .truncatingRemainder(dividingBy: 360)
         }
     }

@@ -173,6 +173,14 @@ final class HelmMonitor: ObservableObject {
         }
     }
 
+    func holdCurrentWind() {
+        guard let wind = snapshot?.wind else { return }
+        settingsStore.update {
+            $0.target = .wind
+            $0.targetWind = HelmMath.normalizedCourse(wind)
+        }
+    }
+
     func clearStatusMessage() {
         adminMessage = nil
     }
@@ -306,7 +314,10 @@ final class HelmMonitor: ObservableObject {
 
     private func readOut(snapshot: HelmSnapshot, settings: AppSettings) async {
         defer { isReadingInProgress = false }
-        let text = announcement(for: snapshot, settings: settings)
+        let text = snapshot.spokenReading(using: settings)
+        // Pusty komunikat = nie ma nic do powiedzenia (np. tryb wiatru bez
+        // danych o wietrze). Zgodnie z decyzją użytkownika NIC wtedy nie mówimy.
+        guard !text.isEmpty else { return }
         lastAnnouncement = text
         await speakRegular(text, settings: settings)
     }
@@ -336,23 +347,33 @@ final class HelmMonitor: ObservableObject {
         defer { isSignalInProgress = false }
         let currentValue: Double?
         let targetValue: Double?
+        let previousValue: Double?
 
         switch settings.target {
         case .none:
             currentValue = snapshot.course
             targetValue = nil
+            previousValue = previousSnapshot?.course
         case .course:
             currentValue = snapshot.course
             targetValue = settings.targetCourse
+            previousValue = previousSnapshot?.course
+        case .wind:
+            currentValue = snapshot.wind
+            targetValue = settings.targetWind
+            previousValue = previousSnapshot?.wind
         }
 
+        // Brak wartości bieżącej (np. tryb wiatru bez czujnika wiatru na tym
+        // egzemplarzu urządzenia) => brak sygnału. Zgodne z zachowaniem
+        // wbudowanego frontendu urządzenia.
         guard let currentValue else { return }
 
         let delta: Double
         if let targetValue {
             delta = HelmMath.relativeCourse(course: currentValue, targetCourse: targetValue)
-        } else if let previousCourse = previousSnapshot?.course {
-            delta = HelmMath.relativeCourse(course: currentValue, targetCourse: previousCourse)
+        } else if let previousValue {
+            delta = HelmMath.relativeCourse(course: currentValue, targetCourse: previousValue)
         } else {
             return
         }
@@ -363,13 +384,19 @@ final class HelmMonitor: ObservableObject {
 
         guard errorExceeded || settings.toneOnCourse || !onTarget else { return }
 
+        // Czasy trwania tonów zależą od ustawienia „Krótsze sygnały" — dokładnie
+        // jak w urządzeniu: ton referencyjny 80/160 ms, przerwa 20/40 ms, ton
+        // właściwy 100/200 ms.
+        let referenceToneDuration: TimeInterval = settings.shortTones ? 0.08 : 0.16
+        let referencePause: TimeInterval = settings.shortTones ? 0.02 : 0.04
+        let mainToneDuration: TimeInterval = settings.shortTones ? 0.1 : 0.2
+
         if errorExceeded || (!onTarget && delta != 0) {
             let compensatedDelta = absoluteDelta - (onTarget ? settings.errorThreshold : 0)
             let severity = min(compensatedDelta, settings.errorRange)
             let gain = delta > 0 ? 1.0 : -1.0
             let multiplier = settings.broadTonalSpread ? 2.0 : 1.0
             if settings.referenceTone {
-                let referenceToneDuration: TimeInterval = 0.08
                 await tonePlayer.play(
                     frequency: frequencyMid,
                     duration: referenceToneDuration,
@@ -378,11 +405,11 @@ final class HelmMonitor: ObservableObject {
                 )
                 // play() wraca natychmiast (nie zwalnia już odtwarzacza przez
                 // sleep), więc odczekaj pełny czas trwania tonu referencyjnego
-                // plus krótką przerwę, ZANIM zagramy ton odchyłki — inaczej
-                // kolejny play() wywoła stop() i urwie ton referencyjny po ~20 ms
-                // (zgłoszone: pierwszy ton był krótszy niż wcześniej).
+                // plus przerwę, ZANIM zagramy ton odchyłki — inaczej kolejny
+                // play() wywoła stop() i urwie ton referencyjny (zgłoszone:
+                // pierwszy ton był krótszy niż wcześniej).
                 try? await Task.sleep(
-                    nanoseconds: UInt64((referenceToneDuration + 0.04) * 1_000_000_000)
+                    nanoseconds: UInt64((referenceToneDuration + referencePause) * 1_000_000_000)
                 )
             }
             let baseOffset = settings.toneBaseOffset / 12
@@ -392,39 +419,18 @@ final class HelmMonitor: ObservableObject {
             )
             await tonePlayer.play(
                 frequency: frequency,
-                duration: 0.1,
+                duration: mainToneDuration,
                 volume: settings.toneVolume / 100,
                 waveform: settings.toneType
             )
         } else {
             await tonePlayer.play(
                 frequency: frequencyMid,
-                duration: 0.1,
+                duration: mainToneDuration,
                 volume: settings.toneVolume / 100,
                 waveform: settings.toneType
             )
         }
-    }
-
-    private func announcement(for snapshot: HelmSnapshot, settings: AppSettings) -> String {
-        var parts: [String] = []
-        let mainText: String
-        if let displayedValue = snapshot.displayedValue(using: settings) {
-            mainText = settings.target == .course
-                ? "Odchyłka \(displayedValue)"
-                : "Kurs \(displayedValue)"
-        } else {
-            mainText = settings.target == .course ? "Odchyłka nieznana" : "Kurs nieznany"
-        }
-        parts.append(mainText)
-        if let rudder = snapshot.rudder {
-            let side = rudder >= 0 ? "prawo" : "lewo"
-            parts.append("Ster \(side) \(abs(Int(rudder.rounded())))")
-        }
-        if let wind = snapshot.wind {
-            parts.append("Wiatr \(Int(wind.rounded()))")
-        }
-        return parts.joined(separator: ", ")
     }
 
     private func retrying<T>(

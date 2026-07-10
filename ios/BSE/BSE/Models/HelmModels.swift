@@ -87,6 +87,8 @@ struct HelmSnapshot: Equatable {
         switch settings.target {
         case .none, .course:
             return course
+        case .wind:
+            return wind
         }
     }
 
@@ -96,29 +98,45 @@ struct HelmSnapshot: Equatable {
             return nil
         case .course:
             return settings.targetCourse
+        case .wind:
+            return settings.targetWind
         }
     }
 
-    func accessibilitySummary(using settings: AppSettings) -> String {
-        let headingText: String
-        if let displayedValue = displayedValue(using: settings) {
-            headingText = settings.target == .course
-                ? "Odchyłka od kursu \(displayedValue) stopni"
-                : "Kurs \(displayedValue) stopni"
+    /// Komunikat odczytu składany DOKŁADNIE tak, jak wbudowany frontend
+    /// urządzenia BlueSeaEye (main.js): sama liczba głównej wartości (kurs,
+    /// odchyłka od kursu albo odchyłka od kąta do wiatru) bez etykiety
+    /// słownej, a następnie ster jako „Prawo N" / „Lewo N" (bez słowa „Ster").
+    /// Elementy łączone przecinkiem. Zwraca pusty ciąg, gdy nie ma nic do
+    /// powiedzenia (np. tryb wiatru bez danych o wietrze) — wywołujący pomija
+    /// wtedy wypowiedź.
+    ///
+    /// Zgodność 1:1 z urządzeniem: przy braku wartości głównej w trybie kursu
+    /// i odchyłki od kursu urządzenie mówi „Kurs nieznany" (nie ma osobnego
+    /// komunikatu dla odchyłki). W trybie wiatru bez danych — na życzenie
+    /// użytkownika NIC nie jest wypowiadane (pomijamy token, zamiast mówić
+    /// „Wiatr nieznany").
+    func spokenReading(using settings: AppSettings) -> String {
+        var parts: [String] = []
+
+        if let value = displayedValue(using: settings) {
+            parts.append("\(value)")
         } else {
-            headingText = settings.target == .course
-                ? "Odchyłka od kursu nieznana"
-                : "Kurs nieznany"
+            switch settings.target {
+            case .none, .course:
+                parts.append("Kurs nieznany")
+            case .wind:
+                // Tryb wiatru bez danych o wietrze: na życzenie użytkownika NIC
+                // nie jest wypowiadane — pomijamy CAŁĄ wypowiedź (także ster).
+                return ""
+            }
         }
 
-        var parts = [headingText]
         if let rudder {
-            let side = rudder >= 0 ? "prawo" : "lewo"
-            parts.append("Ster \(abs(Int(rudder.rounded()))) stopni \(side)")
+            let side = rudder > 0 ? "Prawo" : "Lewo"
+            parts.append("\(side) \(abs(Int(rudder.rounded())))")
         }
-        if let wind {
-            parts.append("Wiatr \(Int(wind.rounded())) stopni")
-        }
+
         return parts.joined(separator: ", ")
     }
 }

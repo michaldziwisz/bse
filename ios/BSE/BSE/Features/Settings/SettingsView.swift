@@ -14,6 +14,9 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    Toggle("Tryb demonstracyjny", isOn: binding(\.demoMode))
+                        .accessibilityHint("Gdy włączony, aplikacja łączy się z serwerem demonstracyjnym w internecie zamiast z urządzeniem w sieci Wi-Fi. Pozwala testować bez łodzi i bez sprzętu.")
+
                     HStack {
                         Text("Adres urządzenia")
                         Spacer()
@@ -29,15 +32,18 @@ struct SettingsView: View {
                         .accessibilityLabel("Adres urządzenia BlueSeaEye")
                         .accessibilityHint("Adres IP lub nazwa hosta urządzenia w sieci Wi-Fi. Domyślnie \(AppSettings.defaultDeviceHost).")
                     }
+                    .disabled(settingsStore.settings.demoMode)
 
                     Button("Przywróć domyślny adres") {
                         settingsStore.update { $0.deviceHost = AppSettings.defaultDeviceHost }
                     }
-                    .disabled(settingsStore.settings.deviceHost == AppSettings.defaultDeviceHost)
+                    .disabled(settingsStore.settings.demoMode || settingsStore.settings.deviceHost == AppSettings.defaultDeviceHost)
                 } header: {
                     Text("Urządzenie")
                 } footer: {
-                    Text("Połącz telefon z siecią Wi-Fi „BlueSeaEye” (hasło blueseaeye). Domyślny adres \(AppSettings.defaultDeviceHost) odpowiada urządzeniu w trybie access pointa. Zmień go tylko, jeśli urządzenie pracuje pod innym adresem.")
+                    Text(settingsStore.settings.demoMode
+                        ? "Tryb demonstracyjny jest włączony. Aplikacja pobiera dane z serwera \(AppSettings.demoBaseURL.absoluteString) przez internet. Wyłącz go, aby łączyć się ze sprzętem w sieci Wi-Fi „BlueSeaEye”."
+                        : "Połącz telefon z siecią Wi-Fi „BlueSeaEye” (hasło blueseaeye). Domyślny adres \(AppSettings.defaultDeviceHost) odpowiada urządzeniu w trybie access pointa. Zmień go tylko, jeśli urządzenie pracuje pod innym adresem.")
                 }
 
                 Section {

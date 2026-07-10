@@ -141,9 +141,15 @@ struct AppSettings: Codable, Equatable {
     var invertRudderAngle: Bool = false
     var rudderAngleCorrection: Double = 0
     var autoResumeMode: AutoResumeMode = .never
+    var demoMode: Bool = false
 
     /// Domyślny host urządzenia BlueSeaEye w trybie access pointa (brama SoftAP).
     static let defaultDeviceHost = "192.168.4.1"
+
+    /// Adres bazowy serwera demonstracyjnego BlueSeaEye. W trybie demo aplikacja
+    /// łączy się z nim przez internet zamiast ze sprzętem w sieci lokalnej —
+    /// pozwala testować bez łodzi i bez fizycznego urządzenia.
+    static let demoBaseURL = URL(string: "https://blueseaeye.eu/api")!
 
     static let `default` = AppSettings()
 
@@ -185,11 +191,19 @@ struct AppSettings: Codable, Equatable {
         invertRudderAngle = value(.invertRudderAngle, defaults.invertRudderAngle)
         rudderAngleCorrection = value(.rudderAngleCorrection, defaults.rudderAngleCorrection)
         autoResumeMode = value(.autoResumeMode, defaults.autoResumeMode)
+        demoMode = value(.demoMode, defaults.demoMode)
     }
 
     /// Adres bazowy API urządzenia zbudowany z `deviceHost`. Akceptuje samo IP
     /// lub nazwę hosta, a także pełny URL wpisany przez użytkownika.
+    ///
+    /// W trybie demo (`demoMode`) zwraca zawsze serwer demonstracyjny w
+    /// internecie zamiast adresu sprzętu w sieci lokalnej — dzięki temu odczyt
+    /// i akcje administracyjne działają bez łodzi i bez fizycznego urządzenia.
     func deviceBaseURL() -> URL {
+        if demoMode {
+            return AppSettings.demoBaseURL
+        }
         let trimmed = deviceHost.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = trimmed.isEmpty ? AppSettings.defaultDeviceHost : trimmed
         if let url = URL(string: host), url.scheme != nil, url.host != nil {

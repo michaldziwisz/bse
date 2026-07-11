@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
+    @EnvironmentObject private var monitor: HelmMonitor
 
     private let numberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
@@ -17,29 +18,28 @@ struct SettingsView: View {
                     Toggle("Tryb demonstracyjny", isOn: binding(\.demoMode))
                         .accessibilityHint("Gdy włączony, aplikacja łączy się z serwerem demonstracyjnym w internecie zamiast z urządzeniem w sieci Wi-Fi. Pozwala testować bez łodzi i bez sprzętu.")
 
-                    HStack {
-                        Text("Adres urządzenia")
-                        Spacer()
-                        TextField(
-                            AppSettings.defaultDeviceHost,
-                            text: deviceHostBinding
-                        )
-                        .multilineTextAlignment(.trailing)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .keyboardType(.URL)
-                        .submitLabel(.done)
-                        .accessibilityLabel("Adres urządzenia BlueSeaEye")
-                        .accessibilityHint("Adres IP lub nazwa hosta urządzenia w sieci Wi-Fi. Domyślnie \(AppSettings.defaultDeviceHost).")
-                    }
-                    .disabled(settingsStore.settings.demoMode)
-
-                    Button("Przywróć domyślny adres") {
-                        settingsStore.update { $0.deviceHost = AppSettings.defaultDeviceHost }
-                    }
-                    .disabled(settingsStore.settings.demoMode || settingsStore.settings.deviceHost == AppSettings.defaultDeviceHost)
-
                     if !settingsStore.settings.demoMode {
+                        HStack {
+                            Text("Adres urządzenia")
+                            Spacer()
+                            TextField(
+                                AppSettings.defaultDeviceHost,
+                                text: deviceHostBinding
+                            )
+                            .multilineTextAlignment(.trailing)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .keyboardType(.URL)
+                            .submitLabel(.done)
+                            .accessibilityLabel("Adres urządzenia BlueSeaEye")
+                            .accessibilityHint("Adres IP lub nazwa hosta urządzenia w sieci Wi-Fi. Domyślnie \(AppSettings.defaultDeviceHost).")
+                        }
+
+                        Button("Przywróć domyślny adres") {
+                            settingsStore.update { $0.deviceHost = AppSettings.defaultDeviceHost }
+                        }
+                        .disabled(settingsStore.settings.deviceHost == AppSettings.defaultDeviceHost)
+
                         Toggle("Trzymaj się sieci urządzenia", isOn: binding(\.keepDeviceWifi))
                             .accessibilityHint("Gdy włączone, w trakcie odczytu telefon trzyma się sieci Wi-Fi BlueSeaEye i nie przełącza się na inną sieć, na przykład statkowy internet, gdy ta chwilowo złapie lepszy zasięg. Przy pierwszym użyciu system poprosi o zgodę.")
                     }
@@ -51,65 +51,16 @@ struct SettingsView: View {
                         : "Połącz telefon z siecią Wi-Fi „BlueSeaEye” (hasło blueseaeye). Domyślny adres \(AppSettings.defaultDeviceHost) odpowiada urządzeniu w trybie access pointa. Zmień go tylko, jeśli urządzenie pracuje pod innym adresem.")
                 }
 
-                Section {
-                    Picker("Sposób odczytu", selection: binding(\.readingOutput)) {
-                        ForEach(ReadingOutputMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-
-                    if settingsStore.settings.readingOutput == .aria {
-                        NumericSettingRow(
-                            title: "Odstęp między aktualizacjami",
-                            valueText: secondsText(settingsStore.settings.readingInterval),
-                            decrementLabel: "Skróć odstęp między aktualizacjami",
-                            incrementLabel: "Wydłuż odstęp między aktualizacjami",
-                            hint: "Zakres od 1 do 45 sekund.",
-                            onDecrement: { update(\.readingInterval, by: -1, range: 1...45) },
-                            onIncrement: { update(\.readingInterval, by: 1, range: 1...45) }
-                        )
-                    } else {
-                        NumericSettingRow(
-                            title: "Głośność odczytu",
-                            valueText: percentText(settingsStore.settings.readingVolume),
-                            decrementLabel: "Zmniejsz głośność odczytu",
-                            incrementLabel: "Zwiększ głośność odczytu",
-                            hint: "Zakres od 0 do 100 procent.",
-                            onDecrement: { update(\.readingVolume, by: -5, range: 0...100) },
-                            onIncrement: { update(\.readingVolume, by: 5, range: 0...100) }
-                        )
-
-                        NumericSettingRow(
-                            title: "Odstęp między odczytami",
-                            valueText: secondsText(settingsStore.settings.readingDelay),
-                            decrementLabel: "Skróć odstęp między odczytami",
-                            incrementLabel: "Wydłuż odstęp między odczytami",
-                            hint: "Zakres od 0 do 30 sekund.",
-                            onDecrement: { update(\.readingDelay, by: -0.5, range: 0...30) },
-                            onIncrement: { update(\.readingDelay, by: 0.5, range: 0...30) }
-                        )
-
-                        NumericSettingRow(
-                            title: "Prędkość odczytu",
-                            valueText: percentText(settingsStore.settings.readingRate),
-                            decrementLabel: "Zmniejsz prędkość odczytu",
-                            incrementLabel: "Zwiększ prędkość odczytu",
-                            hint: "Zakres od 50 do 400 procent.",
-                            onDecrement: { update(\.readingRate, by: -10, range: 50...400) },
-                            onIncrement: { update(\.readingRate, by: 10, range: 50...400) }
-                        )
-
-                        Picker("Głos", selection: voiceBinding) {
-                            Text("Domyślny").tag("")
-                            ForEach(settingsStore.availableVoices()) { voice in
-                                Text(voice.title).tag(voice.id)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Odczyt")
-                } footer: {
-                    Text("Tryb czytnika ekranu najlepiej działa z aktywnym VoiceOver.")
+                Section("Odczyt") {
+                    AdjustableSettingRow(
+                        title: "Mów co",
+                        value: settingsStore.settings.readingInterval,
+                        minValue: 5,
+                        maxValue: 45,
+                        step: 5,
+                        valueLabel: { secondsText($0) },
+                        onChange: { set(\.readingInterval, to: $0) }
+                    )
                 }
 
                 Section("Sygnały dźwiękowe") {
@@ -125,104 +76,74 @@ struct SettingsView: View {
                         }
                     }
 
-                    NumericSettingRow(
+                    AdjustableSettingRow(
                         title: "Głośność sygnałów",
-                        valueText: percentText(settingsStore.settings.toneVolume),
-                        decrementLabel: "Zmniejsz głośność sygnałów",
-                        incrementLabel: "Zwiększ głośność sygnałów",
-                        hint: "Zakres od 0 do 100 procent.",
-                        onDecrement: { update(\.toneVolume, by: -5, range: 0...100) },
-                        onIncrement: { update(\.toneVolume, by: 5, range: 0...100) }
+                        value: settingsStore.settings.toneVolume,
+                        minValue: 0,
+                        maxValue: 100,
+                        step: 5,
+                        valueLabel: { percentText($0) },
+                        onChange: { set(\.toneVolume, to: $0) }
                     )
 
-                    NumericSettingRow(
+                    AdjustableSettingRow(
                         title: "Odstęp między sygnałami",
-                        valueText: secondsText(settingsStore.settings.toneDelay),
-                        decrementLabel: "Skróć odstęp między sygnałami",
-                        incrementLabel: "Wydłuż odstęp między sygnałami",
-                        hint: "Zakres od 0,5 do 5 sekund.",
-                        onDecrement: { update(\.toneDelay, by: -0.1, range: 0.5...5) },
-                        onIncrement: { update(\.toneDelay, by: 0.1, range: 0.5...5) }
+                        value: settingsStore.settings.toneDelay,
+                        minValue: 0.5,
+                        maxValue: 5,
+                        step: 0.5,
+                        valueLabel: { secondsText($0) },
+                        onChange: { set(\.toneDelay, to: $0) }
                     )
 
-                    NumericSettingRow(
-                        title: "Bazowy odstęp od tonu na kursie",
-                        valueText: decimalText(settingsStore.settings.toneBaseOffset),
-                        decrementLabel: "Zmniejsz bazowy odstęp",
-                        incrementLabel: "Zwiększ bazowy odstęp",
-                        hint: "Zakres od 0 do 6 półtonów.",
-                        onDecrement: { update(\.toneBaseOffset, by: -1, range: 0...6) },
-                        onIncrement: { update(\.toneBaseOffset, by: 1, range: 0...6) }
-                    )
-
-                    NumericSettingRow(
+                    AdjustableSettingRow(
                         title: "Dozwolona odchyłka",
-                        valueText: degreesText(settingsStore.settings.errorThreshold),
-                        decrementLabel: "Zmniejsz dozwoloną odchyłkę",
-                        incrementLabel: "Zwiększ dozwoloną odchyłkę",
-                        hint: "Zakres od 1 do 15 stopni.",
-                        onDecrement: { update(\.errorThreshold, by: -0.5, range: 1...15) },
-                        onIncrement: { update(\.errorThreshold, by: 0.5, range: 1...15) }
+                        value: settingsStore.settings.errorThreshold,
+                        minValue: 1,
+                        maxValue: 15,
+                        step: 0.5,
+                        valueLabel: { degreesText($0) },
+                        onChange: { set(\.errorThreshold, to: $0) }
                     )
 
-                    NumericSettingRow(
+                    AdjustableSettingRow(
                         title: "Zakres sygnalizowanej odchyłki",
-                        valueText: degreesText(settingsStore.settings.errorRange),
-                        decrementLabel: "Zmniejsz zakres sygnalizacji",
-                        incrementLabel: "Zwiększ zakres sygnalizacji",
-                        hint: "Zakres od 15 do 60 stopni.",
-                        onDecrement: { update(\.errorRange, by: -1, range: 15...60) },
-                        onIncrement: { update(\.errorRange, by: 1, range: 15...60) }
-                    )
-
-                    if settingsStore.settings.readingOutput != .aria {
-                        Toggle("Unikaj sygnalizowania w trakcie odczytu", isOn: binding(\.avoidSignalsOverlap))
-                    }
-                }
-
-                Section("Źródło danych") {
-                    Picker("Źródło kursu", selection: binding(\.courseSource)) {
-                        ForEach(CourseSource.allCases) { source in
-                            Text(source.title).tag(source)
-                        }
-                    }
-
-                    NumericSettingRow(
-                        title: "Okno uśredniania",
-                        valueText: "\(settingsStore.settings.averageWindow) s",
-                        decrementLabel: "Zmniejsz okno uśredniania",
-                        incrementLabel: "Zwiększ okno uśredniania",
-                        hint: "Zakres od 1 do 5 sekund.",
-                        onDecrement: { updateInt(\.averageWindow, by: -1, range: 1...5) },
-                        onIncrement: { updateInt(\.averageWindow, by: 1, range: 1...5) }
+                        value: settingsStore.settings.errorRange,
+                        minValue: 15,
+                        maxValue: 60,
+                        step: 1,
+                        valueLabel: { degreesText($0) },
+                        onChange: { set(\.errorRange, to: $0) }
                     )
                 }
 
                 Section("Ustawienia pomocnicze") {
                     Toggle("Odwróć wychylenie steru", isOn: binding(\.invertRudderAngle))
 
-                    NumericSettingRow(
+                    AdjustableSettingRow(
                         title: "Poprawka wychylenia steru",
-                        valueText: degreesText(settingsStore.settings.rudderAngleCorrection),
-                        decrementLabel: "Zmniejsz poprawkę wychylenia steru",
-                        incrementLabel: "Zwiększ poprawkę wychylenia steru",
-                        hint: "Zakres od minus 90 do 90 stopni.",
-                        onDecrement: { update(\.rudderAngleCorrection, by: -1, range: -90...90) },
-                        onIncrement: { update(\.rudderAngleCorrection, by: 1, range: -90...90) }
+                        value: settingsStore.settings.rudderAngleCorrection,
+                        minValue: -90,
+                        maxValue: 90,
+                        step: 1,
+                        valueLabel: { degreesText($0) },
+                        onChange: { set(\.rudderAngleCorrection, to: $0) }
                     )
                 }
 
-                Section {
-                    Picker("Wznawianie odczytu", selection: binding(\.autoResumeMode)) {
-                        ForEach(AutoResumeMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .accessibilityHint("Decyduje, czy po ponownym uruchomieniu aplikacji odczyt włączy się sam.")
-                } header: {
-                    Text("Wznawianie po restarcie")
-                } footer: {
-                    Text("Jeśli system iOS zamknie aplikację w tle podczas dłuższej pracy, po jej ponownym uruchomieniu odczyt jest domyślnie wyłączony — trzeba go włączyć przyciskiem. Ustaw „Zawsze przy starcie”, aby odczyt wracał sam, gdy był włączony przed zamknięciem. Ustaw „Tylko po wznowieniu w tle”, aby wracał sam wyłącznie wtedy, gdy to system wskrzesił aplikację bez Twojego udziału, a przy zwykłym otwarciu czekał na przycisk.")
+                Section("Czynności urządzenia") {
+                    ConfirmableActionRow(
+                        title: "Kalibracja żyroskopu",
+                        warning: "Kalibrację żyroskopu należy przeprowadzić po ostatecznym zamocowaniu urządzenia do stałej części statku i gdy statek jest stabilny. Najlepiej w porcie na cumach.",
+                        confirmLabel: "Kalibruj",
+                        onConfirm: { Task { await monitor.runAdministrationAction(.calibrate) } }
+                    )
+                    ConfirmableActionRow(
+                        title: "Restart urządzenia",
+                        warning: "Urządzenie uruchomi się ponownie. Po restarcie zwykle łączy się z powrotem samo. Jeśli w pobliżu jest inna zapamiętana sieć Wi-Fi, ponownie włącz odczyt na ekranie Ster, aby aplikacja wróciła do sieci „BlueSeaEye”.",
+                        confirmLabel: "Restart",
+                        onConfirm: { Task { await monitor.runAdministrationAction(.reboot) } }
+                    )
                 }
             }
             .navigationTitle("Ustawienia")
@@ -251,34 +172,9 @@ struct SettingsView: View {
         )
     }
 
-    private var voiceBinding: Binding<String> {
-        Binding(
-            get: { settingsStore.settings.readingVoiceIdentifier ?? "" },
-            set: { newValue in
-                settingsStore.update { settings in
-                    settings.readingVoiceIdentifier = newValue.isEmpty ? nil : newValue
-                }
-            }
-        )
-    }
-
-    private func update(
-        _ keyPath: WritableKeyPath<AppSettings, Double>,
-        by step: Double,
-        range: ClosedRange<Double>
-    ) {
+    private func set(_ keyPath: WritableKeyPath<AppSettings, Double>, to value: Double) {
         settingsStore.update { settings in
-            settings[keyPath: keyPath] = min(max(settings[keyPath: keyPath] + step, range.lowerBound), range.upperBound)
-        }
-    }
-
-    private func updateInt(
-        _ keyPath: WritableKeyPath<AppSettings, Int>,
-        by step: Int,
-        range: ClosedRange<Int>
-    ) {
-        settingsStore.update { settings in
-            settings[keyPath: keyPath] = min(max(settings[keyPath: keyPath] + step, range.lowerBound), range.upperBound)
+            settings[keyPath: keyPath] = value
         }
     }
 
@@ -296,5 +192,35 @@ struct SettingsView: View {
 
     private func decimalText(_ value: Double) -> String {
         numberFormatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+}
+
+/// Wiersz czynności urządzenia: po stuknięciu rozwija ostrzeżenie i przycisk
+/// potwierdzenia (kalibracja / restart).
+private struct ConfirmableActionRow: View {
+    let title: String
+    let warning: String
+    let confirmLabel: String
+    let onConfirm: () -> Void
+
+    @State private var expanded = false
+
+    var body: some View {
+        Button(title) {
+            withAnimation { expanded.toggle() }
+        }
+        .accessibilityHint("Pokazuje ostrzeżenie i przycisk potwierdzenia.")
+
+        if expanded {
+            Text(warning)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Button(confirmLabel, role: .destructive) {
+                onConfirm()
+                expanded = false
+            }
+            .accessibilityHint(warning)
+        }
     }
 }

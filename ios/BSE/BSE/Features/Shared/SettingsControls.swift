@@ -59,3 +59,42 @@ struct SectionHeaderText: View {
         }
     }
 }
+
+/// „Wybieracz" wartości: pojedynczy element regulowany VoiceOver. Gest jednym
+/// palcem góra/dół zmienia wartość o jeden krok (`step`) — idiomatyczny
+/// odpowiednik androidowego suwaka. Widocznie prezentuje nazwę i bieżącą wartość;
+/// dla VoiceOver ma rolę „adjustable" i sam ogłasza nową wartość po zmianie.
+struct AdjustableSettingRow: View {
+    let title: String
+    let value: Double
+    let minValue: Double
+    let maxValue: Double
+    let step: Double
+    let valueLabel: (Double) -> String
+    let onChange: (Double) -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+            Spacer()
+            Text(valueLabel(value))
+                .font(.headline)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(valueLabel(value))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                onChange(min(value + step, maxValue))
+            case .decrement:
+                onChange(max(value - step, minValue))
+            @unknown default:
+                break
+            }
+        }
+    }
+}

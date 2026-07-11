@@ -19,6 +19,7 @@ struct HelmDashboardView: View {
                     if monitor.isConnectionLost {
                         connectionWarningSection
                     }
+                    connectionStatusLine
                     statusSection
                     controlsSection
                 }
@@ -40,6 +41,29 @@ struct HelmDashboardView: View {
         // Bieżący stan — sam kafelek z odczytem (bez nagłówka, opisu i czasu).
         CompassCardView(snapshot: monitor.snapshot, settings: settings)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var connectionStatusLine: some View {
+        let connected = monitor.snapshot != nil && !monitor.isConnectionLost
+        let text: String
+        switch (settings.demoMode, connected) {
+        case (true, true): text = "Połączony z serwerem demo"
+        case (true, false): text = "Brak połączenia z serwerem demo"
+        case (false, true): text = "Połączony z siecią BlueSeaEye"
+        case (false, false): text = "Brak połączenia z siecią BlueSeaEye"
+        }
+        return Text(text)
+            .font(.subheadline.weight(.medium))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                (connected ? Color.green.opacity(0.15) : Color.red.opacity(0.15)),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .foregroundStyle(connected ? Color.green : Color.red)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.updatesFrequently)
     }
 
     private func crashReportSection(_ reason: String) -> some View {
@@ -145,14 +169,17 @@ struct HelmDashboardView: View {
 
             if settings.target == .course {
                 VStack(alignment: .leading, spacing: 12) {
+                    // Kurs prezentujemy jako 1–360 (360 = północ); wewnętrznie
+                    // trzymamy 0–359 (0 = północ), więc 360 zapisujemy jako 0,
+                    // a zapisane 0 pokazujemy jako 360.
                     AdjustableSettingRow(
                         title: "Zadany kurs",
-                        value: settings.targetCourse ?? 0,
-                        minValue: 0,
-                        maxValue: 359,
+                        value: (settings.targetCourse ?? 0) == 0 ? 360 : (settings.targetCourse ?? 0),
+                        minValue: 1,
+                        maxValue: 360,
                         step: 1,
-                        valueLabel: { String(format: "%03.0f°", $0) },
-                        onChange: { setTargetCourse($0) },
+                        valueLabel: { degreesPolish(Int($0)) },
+                        onChange: { setTargetCourse($0 >= 360 ? 0 : $0) },
                         wrap: true,
                         allowKeyboardInput: true
                     )
@@ -211,4 +238,22 @@ struct HelmDashboardView: View {
             settings.targetCourse = HelmMath.normalizedCourse(value)
         }
     }
+}
+
+/// Liczba stopni z polską odmianą rzeczownika: 1 stopień, 2 stopnie, 20 stopni.
+func degreesPolish(_ n: Int) -> String {
+    let a = abs(n)
+    let mod100 = a % 100
+    let mod10 = a % 10
+    let word: String
+    if a == 1 {
+        word = "stopień"
+    } else if (12...14).contains(mod100) {
+        word = "stopni"
+    } else if (2...4).contains(mod10) {
+        word = "stopnie"
+    } else {
+        word = "stopni"
+    }
+    return "\(n) \(word)"
 }

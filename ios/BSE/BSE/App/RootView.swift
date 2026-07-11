@@ -11,6 +11,7 @@ enum FeatureFlags {
 
 struct RootView: View {
     @EnvironmentObject private var monitor: HelmMonitor
+    @EnvironmentObject private var settingsStore: SettingsStore
 
     var body: some View {
         TabView {
@@ -40,6 +41,12 @@ struct RootView: View {
         }
         .onChange(of: monitor.isReadingEnabled) { isReadingEnabled in
             UIApplication.shared.isIdleTimerDisabled = isReadingEnabled
+        }
+        .onChange(of: settingsStore.settings.demoMode) { _ in
+            monitor.applyDeviceWifiPreference()
+        }
+        .onChange(of: settingsStore.settings.keepDeviceWifi) { _ in
+            monitor.applyDeviceWifiPreference()
         }
         .accessibilityAction(.magicTap) {
             monitor.toggleReading()

@@ -82,6 +82,9 @@ final class HelmMonitor: ObservableObject {
     func start() {
         guard loopTask == nil else { return }
         isPolling = true
+        // Połączenie z siecią BlueSeaEye trzymamy OD RAZU po starcie (nie dopiero
+        // po włączeniu odczytu), żeby transmisja była pewna od pierwszej chwili.
+        applyDeviceWifiPreference()
         loopTask = Task { [weak self] in
             await self?.runLoop()
         }
@@ -113,7 +116,7 @@ final class HelmMonitor: ObservableObject {
             do {
                 try audioSessionController.startKeepAlive()
                 nowPlayingController.markPlaying()
-                applyDeviceWifiHoldIfNeeded()
+                applyDeviceWifiPreference()
             } catch {
                 errorMessage = error.localizedDescription
                 isReadingEnabled = false
@@ -127,7 +130,8 @@ final class HelmMonitor: ObservableObject {
             audioSessionController.stopKeepAlive()
             nowPlayingController.markStopped()
             notificationController.clearConnectionLostAlert()
-            deviceWifiController.stop()
+            // Sieć BlueSeaEye trzymamy niezależnie od odczytu (od startu), więc
+            // NIE zdejmujemy jej tutaj — patrz applyDeviceWifiPreference().
         }
     }
 
@@ -152,20 +156,23 @@ final class HelmMonitor: ObservableObject {
         do {
             try audioSessionController.startKeepAlive()
             nowPlayingController.markPlaying()
-            applyDeviceWifiHoldIfNeeded()
+            applyDeviceWifiPreference()
         } catch {
             errorMessage = error.localizedDescription
             isReadingEnabled = false
         }
     }
 
-    /// Przypina telefon do sieci Wi-Fi urządzenia BlueSeaEye na czas odczytu,
-    /// jeśli użytkownik na to pozwolił i nie jest w trybie demonstracyjnym.
-    /// Zapobiega przełączeniu przez system na inną sieć (np. statkowy internet).
-    private func applyDeviceWifiHoldIfNeeded() {
+    /// Ustawia trzymanie sieci Wi-Fi urządzenia BlueSeaEye zgodnie z ustawieniami
+    /// (niezależnie od odczytu): włączone gdy `keepDeviceWifi` i nie tryb demo,
+    /// inaczej zdejmuje konfigurację. Wołane na starcie oraz po zmianie ustawień.
+    func applyDeviceWifiPreference() {
         let settings = settingsStore.settings
-        guard settings.keepDeviceWifi, !settings.demoMode else { return }
-        deviceWifiController.start()
+        if settings.keepDeviceWifi, !settings.demoMode {
+            deviceWifiController.start()
+        } else {
+            deviceWifiController.stop()
+        }
     }
 
     /// Jeśli poprzednie uruchomienie zakończyło się crashem, udostępnia jego

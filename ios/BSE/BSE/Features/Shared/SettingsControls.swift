@@ -64,6 +64,9 @@ struct SectionHeaderText: View {
 /// palcem góra/dół zmienia wartość o jeden krok (`step`) — idiomatyczny
 /// odpowiednik androidowego suwaka. Widocznie prezentuje nazwę i bieżącą wartość;
 /// dla VoiceOver ma rolę „adjustable" i sam ogłasza nową wartość po zmianie.
+///
+/// `wrap` = zawijanie przez granicę zakresu (359 + 1 → 0, 0 − 1 → 359).
+/// `allowKeyboardInput` = dwukrotne stuknięcie otwiera pole do wpisania wartości.
 struct AdjustableSettingRow: View {
     let title: String
     let value: Double
@@ -72,6 +75,23 @@ struct AdjustableSettingRow: View {
     let step: Double
     let valueLabel: (Double) -> String
     let onChange: (Double) -> Void
+    var wrap: Bool = false
+    var allowKeyboardInput: Bool = false
+
+    @State private var showKeyboardEntry = false
+    @State private var entryText = ""
+
+    private func stepped(_ forward: Bool) -> Double {
+        let delta = forward ? step : -step
+        var next = value + delta
+        if wrap {
+            if next > maxValue { next = minValue }
+            else if next < minValue { next = maxValue }
+        } else {
+            next = Swift.min(Swift.max(next, minValue), maxValue)
+        }
+        return next
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -89,12 +109,49 @@ struct AdjustableSettingRow: View {
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment:
-                onChange(min(value + step, maxValue))
+                onChange(stepped(true))
             case .decrement:
-                onChange(max(value - step, minValue))
+                onChange(stepped(false))
             @unknown default:
                 break
             }
+        }
+        .modifier(KeyboardEntryModifier(
+            enabled: allowKeyboardInput,
+            onActivate: {
+                entryText = String(Int(value.rounded()))
+                showKeyboardEntry = true
+            }
+        ))
+        .alert(title, isPresented: $showKeyboardEntry) {
+            TextField("Wartość", text: $entryText)
+                .keyboardType(.numberPad)
+            Button("Ustaw") {
+                if let entered = Int(entryText.trimmingCharacters(in: .whitespaces)) {
+                    let clamped = Swift.min(Swift.max(Double(entered), minValue), maxValue)
+                    onChange(clamped)
+                }
+            }
+            Button("Anuluj", role: .cancel) { }
+        } message: {
+            Text("Wpisz wartość z zakresu \(Int(minValue))–\(Int(maxValue)).")
+        }
+    }
+}
+
+/// Dodaje akcję aktywacji (dwukrotne stuknięcie VoiceOver / tap) tylko gdy
+/// `enabled`; inaczej element pozostaje bez zmian.
+private struct KeyboardEntryModifier: ViewModifier {
+    let enabled: Bool
+    let onActivate: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .accessibilityAction(.default, onActivate)
+                .onTapGesture(count: 2, perform: onActivate)
+        } else {
+            content
         }
     }
 }

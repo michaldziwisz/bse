@@ -152,7 +152,9 @@ struct HelmDashboardView: View {
                         maxValue: 359,
                         step: 1,
                         valueLabel: { String(format: "%03.0f°", $0) },
-                        onChange: { setTargetCourse($0) }
+                        onChange: { setTargetCourse($0) },
+                        wrap: true,
+                        allowKeyboardInput: true
                     )
 
                     Button("Ustaw aktualny kurs") {

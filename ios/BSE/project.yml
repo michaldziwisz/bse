@@ -18,6 +18,7 @@ settings:
     SUPPORTS_MACCATALYST: NO
     GENERATE_INFOPLIST_FILE: NO
     INFOPLIST_FILE: BSE/Resources/Info.plist
+    CODE_SIGN_ENTITLEMENTS: BSE/BSE.entitlements
     CODE_SIGN_STYLE: Automatic
 targets:
   BSE:

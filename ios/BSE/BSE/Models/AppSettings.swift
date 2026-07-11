@@ -142,9 +142,14 @@ struct AppSettings: Codable, Equatable {
     var rudderAngleCorrection: Double = 0
     var autoResumeMode: AutoResumeMode = .never
     var demoMode: Bool = false
+    var keepDeviceWifi: Bool = true
 
     /// Domyślny host urządzenia BlueSeaEye w trybie access pointa (brama SoftAP).
     static let defaultDeviceHost = "192.168.4.1"
+
+    /// SSID i hasło access pointa urządzenia BlueSeaEye (tryb SoftAP).
+    static let deviceWifiSSID = "BlueSeaEye"
+    static let deviceWifiPassphrase = "blueseaeye"
 
     /// Adres bazowy serwera demonstracyjnego BlueSeaEye. W trybie demo aplikacja
     /// łączy się z nim przez internet zamiast ze sprzętem w sieci lokalnej —
@@ -192,6 +197,7 @@ struct AppSettings: Codable, Equatable {
         rudderAngleCorrection = value(.rudderAngleCorrection, defaults.rudderAngleCorrection)
         autoResumeMode = value(.autoResumeMode, defaults.autoResumeMode)
         demoMode = value(.demoMode, defaults.demoMode)
+        keepDeviceWifi = value(.keepDeviceWifi, defaults.keepDeviceWifi)
     }
 
     /// Adres bazowy API urządzenia zbudowany z `deviceHost`. Akceptuje samo IP

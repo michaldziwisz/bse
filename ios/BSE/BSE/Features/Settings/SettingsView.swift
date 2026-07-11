@@ -38,6 +38,11 @@ struct SettingsView: View {
                         settingsStore.update { $0.deviceHost = AppSettings.defaultDeviceHost }
                     }
                     .disabled(settingsStore.settings.demoMode || settingsStore.settings.deviceHost == AppSettings.defaultDeviceHost)
+
+                    if !settingsStore.settings.demoMode {
+                        Toggle("Trzymaj się sieci urządzenia", isOn: binding(\.keepDeviceWifi))
+                            .accessibilityHint("Gdy włączone, w trakcie odczytu telefon trzyma się sieci Wi-Fi BlueSeaEye i nie przełącza się na inną sieć, na przykład statkowy internet, gdy ta chwilowo złapie lepszy zasięg. Przy pierwszym użyciu system poprosi o zgodę.")
+                    }
                 } header: {
                     Text("Urządzenie")
                 } footer: {

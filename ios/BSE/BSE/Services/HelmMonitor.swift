@@ -20,6 +20,7 @@ final class HelmMonitor: ObservableObject {
     private let audioSessionController: AudioSessionController
     private let notificationController: SafetyNotificationController
     private let nowPlayingController: NowPlayingController
+    private let deviceWifiController: DeviceWifiController
 
     private let statusInterval: TimeInterval = 0.5
     private let loopDelayNanoseconds: UInt64 = 100_000_000
@@ -60,6 +61,10 @@ final class HelmMonitor: ObservableObject {
         self.nowPlayingController = nowPlayingController
         self.speechService = SpeechService(audioSessionController: audioSessionController)
         self.tonePlayer = TonePlayer(audioSessionController: audioSessionController)
+        self.deviceWifiController = DeviceWifiController(
+            ssid: AppSettings.deviceWifiSSID,
+            passphrase: AppSettings.deviceWifiPassphrase
+        )
 
         nowPlayingController.onPlay = { [weak self] in
             guard let self, !self.isReadingEnabled else { return }
@@ -95,6 +100,7 @@ final class HelmMonitor: ObservableObject {
         audioSessionController.stopKeepAlive()
         nowPlayingController.markStopped()
         notificationController.clearConnectionLostAlert()
+        deviceWifiController.stop()
     }
 
     func toggleReading() {
@@ -107,6 +113,7 @@ final class HelmMonitor: ObservableObject {
             do {
                 try audioSessionController.startKeepAlive()
                 nowPlayingController.markPlaying()
+                applyDeviceWifiHoldIfNeeded()
             } catch {
                 errorMessage = error.localizedDescription
                 isReadingEnabled = false
@@ -120,6 +127,7 @@ final class HelmMonitor: ObservableObject {
             audioSessionController.stopKeepAlive()
             nowPlayingController.markStopped()
             notificationController.clearConnectionLostAlert()
+            deviceWifiController.stop()
         }
     }
 
@@ -144,10 +152,20 @@ final class HelmMonitor: ObservableObject {
         do {
             try audioSessionController.startKeepAlive()
             nowPlayingController.markPlaying()
+            applyDeviceWifiHoldIfNeeded()
         } catch {
             errorMessage = error.localizedDescription
             isReadingEnabled = false
         }
+    }
+
+    /// Przypina telefon do sieci Wi-Fi urządzenia BlueSeaEye na czas odczytu,
+    /// jeśli użytkownik na to pozwolił i nie jest w trybie demonstracyjnym.
+    /// Zapobiega przełączeniu przez system na inną sieć (np. statkowy internet).
+    private func applyDeviceWifiHoldIfNeeded() {
+        let settings = settingsStore.settings
+        guard settings.keepDeviceWifi, !settings.demoMode else { return }
+        deviceWifiController.start()
     }
 
     /// Jeśli poprzednie uruchomienie zakończyło się crashem, udostępnia jego

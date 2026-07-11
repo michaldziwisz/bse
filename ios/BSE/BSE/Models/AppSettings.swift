@@ -78,9 +78,9 @@ enum TargetMode: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .none:
-            return "Kurs"
+            return "Aktualny kurs"
         case .course:
-            return "Odchyłka od zadanego kursu"
+            return "Zadany kurs"
         case .wind:
             return "Odchyłka od kąta do wiatru"
         }

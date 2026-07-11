@@ -58,11 +58,6 @@ struct CompassCardView: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
                 }
-                if let wind = snapshot?.wind {
-                    Text("Wiatr \(Int(wind.rounded()))°")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
             }
             .padding(28)
             .background(.ultraThinMaterial, in: Circle())

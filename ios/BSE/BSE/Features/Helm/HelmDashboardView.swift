@@ -21,13 +21,11 @@ struct HelmDashboardView: View {
                     }
                     statusSection
                     controlsSection
-                    latestAnnouncementSection
-                    deviceSection
                 }
                 .padding()
             }
             .navigationTitle("Ster")
-            .toolbarTitleDisplayMode(.large)
+            .toolbar(.hidden, for: .navigationBar)
             .alert("Błąd połączenia", isPresented: errorIsPresented) {
                 Button("OK") {
                     monitor.clearError()
@@ -39,29 +37,9 @@ struct HelmDashboardView: View {
     }
 
     private var statusSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeaderText(
-                title: "Bieżący status",
-                description: "Widok stale odświeża dane z urządzenia BlueSeaEye."
-            )
-            CompassCardView(snapshot: monitor.snapshot, settings: settings)
-
-            if let snapshot = monitor.snapshot {
-                Text("Ostatnia aktualizacja: \(snapshot.fetchedAt.formatted(date: .omitted, time: .standard))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(
-                        "Ostatnia aktualizacja \(snapshot.fetchedAt.formatted(date: .omitted, time: .standard))"
-                    )
-            } else {
-                ContentUnavailableView(
-                    "Brak odczytów",
-                    systemImage: "wifi.exclamationmark",
-                    description: Text("Połącz telefon z siecią Wi-Fi „BlueSeaEye” i sprawdź adres urządzenia w Ustawieniach.")
-                )
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Bieżący stan — sam kafelek z odczytem (bez nagłówka, opisu i czasu).
+        CompassCardView(snapshot: monitor.snapshot, settings: settings)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func crashReportSection(_ reason: String) -> some View {
@@ -146,14 +124,9 @@ struct HelmDashboardView: View {
 
     private var controlsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeaderText(
-                title: "Sterowanie odczytem",
-                description: "Możesz czytać pełny kurs albo odchyłkę od zapamiętanego kursu."
-            )
-
             Button(action: monitor.toggleReading) {
                 Label(
-                    monitor.isReadingEnabled ? "Zatrzymaj odczyt" : "Uruchom odczyt",
+                    monitor.isReadingEnabled ? "Stop" : "Czytaj",
                     systemImage: monitor.isReadingEnabled ? "pause.circle.fill" : "play.circle.fill"
                 )
                 .frame(maxWidth: .infinity)
@@ -163,12 +136,12 @@ struct HelmDashboardView: View {
             .accessibilityHint("Włącza lub wyłącza komunikaty głosowe oraz sygnały.")
 
             Picker("Tryb odczytu", selection: targetBinding) {
-                ForEach(TargetMode.allCases) { target in
+                ForEach([TargetMode.none, TargetMode.course]) { target in
                     Text(target.title).tag(target)
                 }
             }
             .pickerStyle(.segmented)
-            .accessibilityHint("Wybiera, czy aplikacja ma czytać kurs czy odchyłkę.")
+            .accessibilityHint("Wybiera, czy aplikacja ma czytać aktualny czy zadany kurs.")
 
             if settings.target == .course {
                 VStack(alignment: .leading, spacing: 12) {
@@ -189,63 +162,7 @@ struct HelmDashboardView: View {
                     .disabled(monitor.snapshot?.course == nil)
                     .accessibilityHint("Zapisuje aktualny kurs jako docelowy.")
                 }
-            } else if settings.target == .wind {
-                VStack(alignment: .leading, spacing: 12) {
-                    NumericSettingRow(
-                        title: "Zadany kąt do wiatru",
-                        valueText: targetWindText,
-                        decrementLabel: "Zmniejsz zadany kąt do wiatru",
-                        incrementLabel: "Zwiększ zadany kąt do wiatru",
-                        hint: "Zmiana co 1 stopień.",
-                        onDecrement: { updateTargetWind(by: -1) },
-                        onIncrement: { updateTargetWind(by: 1) }
-                    )
-
-                    Button("Ustaw aktualny kąt do wiatru") {
-                        monitor.holdCurrentWind()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(monitor.snapshot?.wind == nil)
-                    .accessibilityHint("Zapisuje aktualny kąt do wiatru jako docelowy.")
-                }
             }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
-    }
-
-    private var latestAnnouncementSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeaderText(
-                title: "Ostatni komunikat",
-                description: settings.readingOutput == .aria
-                    ? "Treść komunikatu jest wysyłana jako ogłoszenie dla VoiceOver."
-                    : "Treść odpowiada ostatniemu odczytowi wypowiedzianemu przez syntezator."
-            )
-            Text(monitor.lastAnnouncement.isEmpty ? "Brak komunikatu." : monitor.lastAnnouncement)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
-                .accessibilityLabel(
-                    monitor.lastAnnouncement.isEmpty
-                        ? "Brak ostatniego komunikatu"
-                        : "Ostatni komunikat: \(monitor.lastAnnouncement)"
-                )
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var deviceSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeaderText(
-                title: "Urządzenie",
-                description: "Połącz telefon z siecią Wi-Fi „BlueSeaEye”. Adres urządzenia zmienisz w Ustawieniach."
-            )
-            Text(settings.deviceBaseURL().absoluteString)
-                .font(.body.monospaced())
-                .textSelection(.enabled)
-                .accessibilityLabel("Adres urządzenia \(settings.deviceBaseURL().absoluteString)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -254,10 +171,6 @@ struct HelmDashboardView: View {
 
     private var targetCourseText: String {
         String(format: "%03.0f°", settings.targetCourse ?? 0)
-    }
-
-    private var targetWindText: String {
-        String(format: "%03.0f°", settings.targetWind ?? 0)
     }
 
     private var targetBinding: Binding<TargetMode> {
@@ -299,13 +212,6 @@ struct HelmDashboardView: View {
         settingsStore.update { settings in
             let current = settings.targetCourse ?? HelmMath.normalizedCourse(monitor.snapshot?.course ?? 0)
             settings.targetCourse = HelmMath.normalizedCourse(current + delta)
-        }
-    }
-
-    private func updateTargetWind(by delta: Double) {
-        settingsStore.update { settings in
-            let current = settings.targetWind ?? HelmMath.normalizedCourse(monitor.snapshot?.wind ?? 0)
-            settings.targetWind = HelmMath.normalizedCourse(current + delta)
         }
     }
 }

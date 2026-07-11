@@ -145,14 +145,14 @@ struct HelmDashboardView: View {
 
             if settings.target == .course {
                 VStack(alignment: .leading, spacing: 12) {
-                    NumericSettingRow(
+                    AdjustableSettingRow(
                         title: "Zadany kurs",
-                        valueText: targetCourseText,
-                        decrementLabel: "Zmniejsz zadany kurs",
-                        incrementLabel: "Zwiększ zadany kurs",
-                        hint: "Zmiana co 1 stopień.",
-                        onDecrement: { updateTargetCourse(by: -1) },
-                        onIncrement: { updateTargetCourse(by: 1) }
+                        value: settings.targetCourse ?? 0,
+                        minValue: 0,
+                        maxValue: 359,
+                        step: 1,
+                        valueLabel: { String(format: "%03.0f°", $0) },
+                        onChange: { setTargetCourse($0) }
                     )
 
                     Button("Ustaw aktualny kurs") {
@@ -167,10 +167,6 @@ struct HelmDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
-    }
-
-    private var targetCourseText: String {
-        String(format: "%03.0f°", settings.targetCourse ?? 0)
     }
 
     private var targetBinding: Binding<TargetMode> {
@@ -208,10 +204,9 @@ struct HelmDashboardView: View {
         )
     }
 
-    private func updateTargetCourse(by delta: Double) {
+    private func setTargetCourse(_ value: Double) {
         settingsStore.update { settings in
-            let current = settings.targetCourse ?? HelmMath.normalizedCourse(monitor.snapshot?.course ?? 0)
-            settings.targetCourse = HelmMath.normalizedCourse(current + delta)
+            settings.targetCourse = HelmMath.normalizedCourse(value)
         }
     }
 }

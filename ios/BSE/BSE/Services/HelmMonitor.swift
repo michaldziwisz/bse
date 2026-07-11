@@ -409,34 +409,15 @@ final class HelmMonitor: ObservableObject {
 
         guard errorExceeded || settings.toneOnCourse || !onTarget else { return }
 
-        // Czasy trwania tonów zależą od ustawienia „Krótsze sygnały" — dokładnie
-        // jak w urządzeniu: ton referencyjny 80/160 ms, przerwa 20/40 ms, ton
-        // właściwy 100/200 ms.
-        let referenceToneDuration: TimeInterval = settings.shortTones ? 0.08 : 0.16
-        let referencePause: TimeInterval = settings.shortTones ? 0.02 : 0.04
-        let mainToneDuration: TimeInterval = settings.shortTones ? 0.1 : 0.2
+        // Ton właściwy: 100 ms. Ton referencyjny został usunięty na życzenie —
+        // sygnalizujemy wyłącznie ton odchyłki.
+        let mainToneDuration: TimeInterval = 0.1
 
         if errorExceeded || (!onTarget && delta != 0) {
             let compensatedDelta = absoluteDelta - (onTarget ? settings.errorThreshold : 0)
             let severity = min(compensatedDelta, settings.errorRange)
             let gain = delta > 0 ? 1.0 : -1.0
             let multiplier = settings.broadTonalSpread ? 2.0 : 1.0
-            if settings.referenceTone {
-                await tonePlayer.play(
-                    frequency: frequencyMid,
-                    duration: referenceToneDuration,
-                    volume: settings.toneVolume / 100,
-                    waveform: settings.toneType
-                )
-                // play() wraca natychmiast (nie zwalnia już odtwarzacza przez
-                // sleep), więc odczekaj pełny czas trwania tonu referencyjnego
-                // plus przerwę, ZANIM zagramy ton odchyłki — inaczej kolejny
-                // play() wywoła stop() i urwie ton referencyjny (zgłoszone:
-                // pierwszy ton był krótszy niż wcześniej).
-                try? await Task.sleep(
-                    nanoseconds: UInt64((referenceToneDuration + referencePause) * 1_000_000_000)
-                )
-            }
             let baseOffset = settings.toneBaseOffset / 12
             let frequency = frequencyMid * pow(
                 2,

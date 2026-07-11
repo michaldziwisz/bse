@@ -55,9 +55,9 @@ struct SettingsView: View {
                     AdjustableSettingRow(
                         title: "Mów co",
                         value: settingsStore.settings.readingInterval,
-                        minValue: 5,
+                        minValue: 1,
                         maxValue: 45,
-                        step: 5,
+                        step: 1,
                         valueLabel: { secondsText($0) },
                         onChange: { set(\.readingInterval, to: $0) }
                     )
@@ -65,10 +65,7 @@ struct SettingsView: View {
 
                 Section("Sygnały dźwiękowe") {
                     Toggle("Odtwarzaj sygnały dźwiękowe", isOn: binding(\.soundSignalsEnabled))
-                    Toggle("Odtwarzaj ton referencyjny", isOn: binding(\.referenceTone))
                     Toggle("Odtwarzaj ton na zadanym kursie", isOn: binding(\.toneOnCourse))
-                    Toggle("Krótsze sygnały", isOn: binding(\.shortTones))
-                    Toggle("Szeroka rozpiętość tonów", isOn: binding(\.broadTonalSpread))
 
                     Picker("Typ dźwięku", selection: binding(\.toneType)) {
                         ForEach(ToneWaveform.allCases) { waveform in
@@ -97,23 +94,13 @@ struct SettingsView: View {
                     )
 
                     AdjustableSettingRow(
-                        title: "Dozwolona odchyłka",
+                        title: "Tolerancja zadanego kursu",
                         value: settingsStore.settings.errorThreshold,
                         minValue: 1,
-                        maxValue: 15,
-                        step: 0.5,
-                        valueLabel: { degreesText($0) },
-                        onChange: { set(\.errorThreshold, to: $0) }
-                    )
-
-                    AdjustableSettingRow(
-                        title: "Zakres sygnalizowanej odchyłki",
-                        value: settingsStore.settings.errorRange,
-                        minValue: 15,
-                        maxValue: 60,
+                        maxValue: 5,
                         step: 1,
-                        valueLabel: { degreesText($0) },
-                        onChange: { set(\.errorRange, to: $0) }
+                        valueLabel: { degreesPolish(Int($0.rounded())) },
+                        onChange: { set(\.errorThreshold, to: $0) }
                     )
                 }
 

@@ -120,7 +120,20 @@ struct HelmSnapshot: Equatable {
         var parts: [String] = []
 
         if let value = displayedValue(using: settings) {
-            parts.append("\(value)")
+            if settings.target == .course {
+                // Odchyłka od zadanego kursu: ujemna = trzeba iść prawiej,
+                // dodatnia = lewiej (na życzenie użytkownika, zamiast liczby ze
+                // znakiem). Zero = na kursie.
+                if value < 0 {
+                    parts.append("prawiej \(abs(value))")
+                } else if value > 0 {
+                    parts.append("lewiej \(value)")
+                } else {
+                    parts.append("0")
+                }
+            } else {
+                parts.append("\(value)")
+            }
         } else {
             switch settings.target {
             case .none, .course:

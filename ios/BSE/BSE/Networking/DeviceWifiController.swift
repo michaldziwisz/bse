@@ -44,16 +44,15 @@ final class DeviceWifiController {
     func start() {
         status = .joining
         let configuration = NEHotspotConfiguration(ssid: ssid, passphrase: passphrase, isWEP: false)
-        // Nie usuwaj konfiguracji, gdy aplikacja zejdzie z pierwszego planu —
-        // chcemy, żeby telefon trzymał się sieci urządzenia w tle podczas rejsu.
-        configuration.lifeTimeInSeconds = nil
+        // joinOnce = false => konfiguracja jest trwała: iOS traktuje sieć jako
+        // preferowaną i sam ją utrzymuje, dopóki jej nie usuniemy w stop().
         configuration.joinOnce = false
 
         NEHotspotConfigurationManager.shared.apply(configuration) { [weak self] error in
             Task { @MainActor in
                 guard let self else { return }
                 if let nsError = error as NSError?,
-                   nsError.domain == NEHotspotConfigurationError.errorDomain,
+                   nsError.domain == NEHotspotConfigurationErrorDomain,
                    nsError.code == NEHotspotConfigurationError.alreadyAssociated.rawValue {
                     // Już połączeni z tą siecią — traktujemy jako sukces.
                     self.status = .active

@@ -11,7 +11,7 @@
 	<key>CFBundleAllowMixedLocalizations</key>
 	<false/>
 	<key>CFBundleDisplayName</key>
-	<string>BSE</string>
+	<string>Sterigo</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

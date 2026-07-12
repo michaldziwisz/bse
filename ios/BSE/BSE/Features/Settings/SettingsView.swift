@@ -4,6 +4,10 @@ struct SettingsView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var monitor: HelmMonitor
 
+    /// Rozwijana sekcja „Zaawansowane” — domyślnie zwinięta, bo to rzadko
+    /// używane opcje techniczne (odwrócenie i poprawka wychylenia steru).
+    @State private var advancedExpanded = false
+
     private let numberFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.maximumFractionDigits = 1
@@ -104,18 +108,26 @@ struct SettingsView: View {
                     )
                 }
 
-                Section("Ustawienia pomocnicze") {
-                    Toggle("Odwróć wychylenie steru", isOn: binding(\.invertRudderAngle))
+                // Ustawienia dotyczące wychylenia steru pokazujemy tylko wtedy, gdy
+                // urządzenie faktycznie dostarcza dane o wychyleniu płetwy steru
+                // (pole rsa) — analogicznie jak przy wietrze. Dodatkowo są schowane
+                // pod rozwijaną sekcją „Zaawansowane”, bo to opcje techniczne.
+                if monitor.snapshot?.rudder != nil {
+                    Section {
+                        DisclosureGroup("Zaawansowane", isExpanded: $advancedExpanded) {
+                            Toggle("Odwróć wychylenie steru", isOn: binding(\.invertRudderAngle))
 
-                    AdjustableSettingRow(
-                        title: "Poprawka wychylenia steru",
-                        value: settingsStore.settings.rudderAngleCorrection,
-                        minValue: -90,
-                        maxValue: 90,
-                        step: 1,
-                        valueLabel: { degreesText($0) },
-                        onChange: { set(\.rudderAngleCorrection, to: $0) }
-                    )
+                            AdjustableSettingRow(
+                                title: "Poprawka wychylenia steru",
+                                value: settingsStore.settings.rudderAngleCorrection,
+                                minValue: -90,
+                                maxValue: 90,
+                                step: 1,
+                                valueLabel: { degreesText($0) },
+                                onChange: { set(\.rudderAngleCorrection, to: $0) }
+                            )
+                        }
+                    }
                 }
 
                 Section("Czynności urządzenia") {

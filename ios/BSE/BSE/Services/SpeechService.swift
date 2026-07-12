@@ -21,7 +21,13 @@ final class SpeechService: NSObject, @preconcurrency AVSpeechSynthesizerDelegate
 
         if shouldUseAccessibilityAnnouncement {
             CrashReporter.breadcrumb("speech: post VoiceOver announcement")
-            UIAccessibility.post(notification: .announcement, argument: text)
+            // Oznacz język wypowiedzi jako polski, żeby VoiceOver czytał ją
+            // polskim głosem niezależnie od bieżącego języka rotora/systemu.
+            let attributed = NSAttributedString(
+                string: text,
+                attributes: [.accessibilitySpeechLanguage: "pl-PL"]
+            )
+            UIAccessibility.post(notification: .announcement, argument: attributed)
         } else {
             CrashReporter.breadcrumb("speech: synthesizer speak")
             await speakWithRecovery(text, settings: settings)

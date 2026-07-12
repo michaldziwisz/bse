@@ -1,0 +1,8 @@
+BSE 1.0.1 — informacje o wersji (App Store, pl)
+
+Co nowego:
+- Magiczne stuknięcie (dwa palce, dwukrotne stuknięcie w VoiceOver) włącza i wyłącza odczyt z dowolnego miejsca w aplikacji.
+- Ustawienia wychylenia steru („Odwróć wychylenie steru”, „Poprawka wychylenia steru”) przeniesione do zwijanej sekcji „Zaawansowane”.
+- Sekcja „Zaawansowane” pojawia się tylko wtedy, gdy urządzenie przesyła dane o wychyleniu steru — podobnie jak przy danych o wietrze.
+
+Uwaga przy pierwszym uruchomieniu: aplikacja łączy się z urządzeniem w sieci lokalnej Wi-Fi (BlueSeaEye). iOS przy pierwszej próbie zapyta o zgodę na dostęp do sieci lokalnej — należy ją włączyć, aby aplikacja mogła odbierać dane ze steru.

@@ -11,3 +11,14 @@ artifacts/
 *.xcuserstate
 *.xcuserdata/
 ios/BSE/build/
+
+# Firmware ESP32 urządzenia BlueSeaEye (duże binarki, nie wersjonujemy)
+firmware.bin
+firmware-backup/
+firmware-main.js.gz
+
+# Własny mock firmware ESP32 (PlatformIO) — źródła wersjonujemy, artefakty nie
+mock-firmware/.pio/
+
+# Zbudowane paczki .ipa — artefakty buildu (CI wrzuca je jako artefakty GitHub Actions)
+release/*.ipa

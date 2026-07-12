@@ -1,0 +1,111 @@
+Temat: BlueSeaEye - mock firmware z przełącznikiem wychylenia steru (do wglądu)
+
+Cześć Błażeju,
+
+pracowaliśmy z Michałem nad aplikacjami BSE (iOS + Android) i przy okazji
+dokopaliśmy się do sprawy wychylenia steru. Chciałem Ci podrzucić, co
+zrobiliśmy, bo może się przydać przy oficjalnym firmware. W załączniku jest
+gotowy mock firmware (źródła + zbudowany .bin).
+
+--------------------------------------------------------------------
+CO SIĘ DZIAŁO (kontekst)
+--------------------------------------------------------------------
+
+Na egzemplarzu testowym Michała, na starszym firmware (build z 27 czerwca 2026),
+odpowiedź z /api/helm zawierała pole "rsa" (wychylenie steru) - i aplikacja
+poprawnie je czytała. Po aktualizacji do nowszego firmware (build z 11 lipca
+2026 22:09:46) doszedł parametr "disableRudder", ale w trybie mock urządzenie
+przestało w ogóle wysyłać "rsa" - niezależnie od tego, czy pytaliśmy z
+disableRudder=true, =false, czy bez parametru. Sprawdziliśmy to na żywym
+sprzęcie wieloma zapytaniami: mock nowego firmware po prostu nie generuje
+danych steru, więc "disableRudder" nie miał na czym działać.
+
+Michał chciał móc TESTOWAĆ oba stany (ster wysyłany / ster wyłączony), więc
+napisaliśmy własny mock firmware, który generuje mockowe wychylenie steru ORAZ
+pozwala je włączać/wyłączać - w modelu, który zacząłeś, czyli parametrem
+disableRudder.
+
+--------------------------------------------------------------------
+CO ROBI TEN MOCK
+--------------------------------------------------------------------
+
+Odtwarza kontrakt HTTP 1:1 z Twoim urządzeniem (sprawdzaliśmy nagłówki i format
+odpowiedzi na żywym sprzęcie), więc aplikacja i wbudowany frontend działają bez
+żadnych zmian:
+
+- Access point "BlueSeaEye" / hasło "blueseaeye", brama 192.168.4.1
+- GET /api/info -> {"device":"BlueSeaEye","model":"mobile","version":"1.0.0",
+  "issued":"mock <data build>","mock":true}
+  (celowo "issued" zaczyna się od "mock", żeby łatwo odróżnić od Twojej wersji)
+- GET /api/helm?time=<ms>&source=<klucz>&window=<ms>
+  * source (cgfa/coga/hdga/cgf/cog/hdg) filtruje pola kursu do jednego; brak
+    source => wszystkie 6 pól
+  * "rsa" (wychylenie steru) dołączane NIEZALEŻNIE od source, o ile ster jest
+    włączony
+  * window w milisekundach; surowe 1..5 zwraca HTTP 400 (jak Twój sprzęt)
+  * nagłówki: Access-Control-Allow-Origin: * oraz Cache-Control: no-cache
+- Wartości mock: kurs dryfuje wokół północy (~ -3..+3 st), rsa oscyluje
+  w zakresie ~ -30..+30 st.
+
+--------------------------------------------------------------------
+PRZEŁĄCZNIK STERU (to jest sedno)
+--------------------------------------------------------------------
+
+Parametr disableRudder jest STANOWY i zapamiętywany w pamięci nieulotnej (NVS):
+
+- GET /api/helm?disableRudder=true  -> ster wyłączony (przestaje wysyłać "rsa")
+- GET /api/helm?disableRudder=false -> ster włączony
+
+Ustawia się go RAZ (curl-em albo w przeglądarce), a kolejne zwykłe zapytania
+aplikacji (bez parametru) już respektują zapamiętany stan. Stan przeżywa restart
+urządzenia (sprawdzone: po hard-resecie ESP nadal pamięta ustawienie).
+Domyślnie ster włączony - jak na starym firmware. Akceptowane wartości:
+true/1/yes/on oraz false/0/no/off.
+
+Uwaga, na którą warto zwrócić uwagę w oficjalnym firmware: to, co widzieliśmy na
+buildzie z 11 lipca, wyglądało tak, jakby parametr disableRudder już był
+w kodzie, ale mock nie produkował "rsa" w ogóle - więc efektu nie dało się
+zobaczyć. Jeśli mock po Twojej stronie ma służyć do testów aplikacji, warto, żeby
+w trybie mock "rsa" było generowane, gdy ster jest włączony (inaczej testerzy
+zawsze widzą "Ster nieznany").
+
+--------------------------------------------------------------------
+JAK ZWERYFIKOWALIŚMY (na żywym sprzęcie)
+--------------------------------------------------------------------
+
+Zapytania jak z aplikacji (source=cgfa):
+1. domyślnie:                  {"cgfa":..,"rsa":..}   (ster wł.)
+2. &disableRudder=true:        {"cgfa":..}            (rsa znika)
+3. potem bez parametru:        {"cgfa":..}            (stan zapamiętany)
+4. &disableRudder=false:       {"cgfa":..,"rsa":..}   (ster wraca)
+5. potem bez parametru:        {"cgfa":..,"rsa":..}
+6. restart ESP + zapytanie:    stan sprzed restartu   (NVS działa)
+
+--------------------------------------------------------------------
+ZAŁĄCZNIKI I JAK WGRAĆ
+--------------------------------------------------------------------
+
+- src/main.cpp        - źródło mocka (Arduino-ESP32 + ESPAsyncWebServer)
+- platformio.ini      - konfiguracja PlatformIO (board esp32dev)
+- BSE-mock-firmware-app0.bin - zbudowany obraz aplikacji (~780 KB)
+  SHA-256: d449a0863a1b7032fb7a3b73e0489417c3038905471eb9dc061af9474abb7ea4
+
+To jest SAMA APLIKACJA (partycja app0), nie pełny obraz. Wgrywa się pod adres
+0x10000 na ESP32 z typowym układem partycji (nvs@0x9000, otadata@0xe000,
+app0@0x10000 1280K, app1@0x150000, spiffs@0x290000 - czyli dokładnie jak Twój
+sprzęt), np.:
+
+  esptool --port COMx --baud 460800 write-flash 0x10000 BSE-mock-firmware-app0.bin
+  esptool --port COMx --baud 460800 erase-region 0xe000 0x2000   # start ze świeżej app0
+
+Można też po prostu zbudować ze źródeł (pio run) - lib_deps ściąga
+ESPAsyncWebServer i AsyncTCP.
+
+Dla jasności: to mock napisany od zera na potrzeby testów (nie mam Twoich źródeł,
+kontrakt odtworzyłem z zachowania urządzenia i wbudowanego frontendu). Traktuj go
+jako narzędzie testowe / propozycję zachowania, a nie ingerencję w Twój kod.
+
+Daj znać, gdyby coś było niejasne albo gdybyś chciał, żeby mock robił coś jeszcze
+(np. analogiczny przełącznik dla wiatru).
+
+Pozdrawiam

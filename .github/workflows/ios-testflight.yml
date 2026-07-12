@@ -103,6 +103,7 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          mkdir -p build
           cat > build/ExportOptions.plist <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -120,10 +121,6 @@ jobs:
           </dict>
           </plist>
           PLIST
-        # mkdir na wypadek, gdyby build/ jeszcze nie istniał
-      - name: Ensure build dir
-        working-directory: ios/BSE
-        run: mkdir -p build
 
       - name: Archive (signed)
         working-directory: ios/BSE

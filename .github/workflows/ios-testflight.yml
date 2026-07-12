@@ -41,7 +41,7 @@ jobs:
   testflight:
     # Guard: uruchamiaj tylko z main i po potwierdzeniu.
     if: github.ref == 'refs/heads/main' && github.event.inputs.confirm == 'tak'
-    runs-on: macos-15
+    runs-on: macos-26
     environment: release
     defaults:
       run:
@@ -51,6 +51,14 @@ jobs:
       SCHEME: BSE
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select latest Xcode (iOS 26 SDK required by App Store)
+        run: |
+          set -euo pipefail
+          sudo xcode-select -s /Applications/Xcode_26.app 2>/dev/null || \
+            sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Install XcodeGen
         run: brew install xcodegen

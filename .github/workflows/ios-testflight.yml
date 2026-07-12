@@ -1,0 +1,184 @@
+name: ios-testflight
+
+# Wysyłka podpisanego builda do TestFlight z runnera macOS w chmurze (bez Maca).
+#
+# URUCHAMIANIE: TYLKO ręcznie (workflow_dispatch) i tylko z gałęzi main.
+# Świadomie NIE ma tu wyzwalacza pull_request — przy publicznym repo PR z forka
+# nie może dostać sekretów, a ograniczenie do workflow_dispatch dodatkowo pilnuje,
+# że job z kluczem Apple odpala wyłącznie osoba z prawem zapisu do repo.
+#
+# BEZPIECZEŃSTWO (publiczne repo):
+#  - Wszystkie dane wrażliwe (certyfikat dystrybucyjny, profil, hasła, klucz API
+#    .p8) siedzą w GitHub Secrets przypiętych do environment `release` — nie ma
+#    ich w repo. Environment można dodatkowo ograniczyć regułą „tylko main”.
+#  - Sekrety są maskowane w logach; keychain jest tymczasowy i kasowany na końcu.
+#  - Akcje przypięte do konkretnych wersji (zaufane, oficjalne).
+#
+# WYMAGANE SEKRETY (environment `release`) — patrz docs/testflight-setup.md:
+#   APPLE_DIST_CERT_P12_BASE64   – certyfikat Apple Distribution (.p12) w base64
+#   APPLE_DIST_CERT_PASSWORD     – hasło do tego .p12
+#   APPLE_PROVISIONING_PROFILE_BASE64 – profil App Store (.mobileprovision) base64
+#   APPLE_TEAM_ID                – 10-znakowy Team ID
+#   ASC_KEY_ID                   – App Store Connect API Key ID
+#   ASC_ISSUER_ID                – App Store Connect API Issuer ID
+#   ASC_KEY_P8_BASE64            – klucz API (.p8) w base64
+#
+# Do czasu uzupełnienia sekretów job po prostu nie ma czego użyć — odpalaj go
+# dopiero, gdy wszystkie 7 sekretów jest ustawione.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Wpisz 'tak', aby potwierdzić wysyłkę do TestFlight"
+        required: true
+        default: "nie"
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    # Guard: uruchamiaj tylko z main i po potwierdzeniu.
+    if: github.ref == 'refs/heads/main' && github.event.inputs.confirm == 'tak'
+    runs-on: macos-15
+    environment: release
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUNDLE_ID: eu.blueseaeye.bse
+      SCHEME: BSE
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios/BSE
+        run: xcodegen generate
+
+      # --- Podpisywanie: import certyfikatu do tymczasowego keychainu ---
+      - name: Import signing certificate
+        env:
+          CERT_B64: ${{ secrets.APPLE_DIST_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DIST_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "$CERT_B64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/dist.p12" -P "$CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          rm -f "$RUNNER_TEMP/dist.p12"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Install provisioning profile
+        env:
+          PROFILE_B64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          echo "$PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          # UUID profilu z odszyfrowanego pliku (potrzebny do ExportOptions).
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")"
+          NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$PROFILE_DIR/$UUID.mobileprovision"
+          echo "PROFILE_UUID=$UUID" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
+
+      - name: Write ExportOptions.plist
+        working-directory: ios/BSE
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          cat > build/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>uploadSymbols</key><true/>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${BUNDLE_ID}</key><string>${PROFILE_NAME}</string>
+            </dict>
+          </dict>
+          </plist>
+          PLIST
+        # mkdir na wypadek, gdyby build/ jeszcze nie istniał
+      - name: Ensure build dir
+        working-directory: ios/BSE
+        run: mkdir -p build
+
+      - name: Archive (signed)
+        working-directory: ios/BSE
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euxo pipefail
+          xcodebuild \
+            -project BSE.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/BSE.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            archive
+
+      - name: Export IPA (app-store)
+        working-directory: ios/BSE
+        run: |
+          set -euxo pipefail
+          xcodebuild -exportArchive \
+            -archivePath build/BSE.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export
+
+      - name: Upload to TestFlight
+        working-directory: ios/BSE
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          # Klucz API dla altool w standardowej lokalizacji.
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$ASC_KEY_P8_BASE64" | base64 --decode \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          IPA="$(ls build/export/*.ipa | head -n1)"
+          echo "Wysyłam: $IPA"
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+
+      - name: Upload IPA artifact (kopia)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BSE-testflight-ipa
+          path: ios/BSE/build/export/*.ipa
+          if-no-files-found: warn

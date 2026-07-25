@@ -69,6 +69,8 @@ struct SettingsView: View {
 
                 Section("Sygnały dźwiękowe") {
                     Toggle("Odtwarzaj sygnały dźwiękowe", isOn: binding(\.soundSignalsEnabled))
+                    Toggle("Dźwięki w panoramie", isOn: binding(\.stereoPanning))
+                        .accessibilityHint("Gdy włączone i masz podłączone obie słuchawki, sygnał odchyłki w lewo słychać bardziej z lewej strony, a w prawo z prawej (po 50% w bok). Sygnał na kursie pozostaje na środku. Dotyczy tylko dźwięków sygnału, nie mowy.")
                     Toggle("Odtwarzaj ton na zadanym kursie", isOn: binding(\.toneOnCourse))
 
                     Picker("Typ dźwięku", selection: binding(\.toneType)) {
@@ -115,6 +117,7 @@ struct SettingsView: View {
                 if monitor.snapshot?.rudder != nil {
                     Section {
                         DisclosureGroup("Zaawansowane", isExpanded: $advancedExpanded) {
+                            Toggle("Odczytuj wychylenie steru", isOn: binding(\.announceRudderAngle))
                             Toggle("Odwróć wychylenie steru", isOn: binding(\.invertRudderAngle))
 
                             AdjustableSettingRow(

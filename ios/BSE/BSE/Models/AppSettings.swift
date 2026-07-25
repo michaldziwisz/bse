@@ -125,6 +125,7 @@ struct AppSettings: Codable, Equatable {
     var readingVoiceIdentifier: String?
     var readingVolume: Double = 100
     var soundSignalsEnabled: Bool = true
+    var stereoPanning: Bool = false
     var toneDelay: Double = 1
     var referenceTone: Bool = true
     var toneBaseOffset: Double = 2
@@ -138,6 +139,7 @@ struct AppSettings: Codable, Equatable {
     var targetWind: Double?
     var errorThreshold: Double = 1
     var errorRange: Double = 30
+    var announceRudderAngle: Bool = true
     var invertRudderAngle: Bool = false
     var rudderAngleCorrection: Double = 0
     var autoResumeMode: AutoResumeMode = .never
@@ -180,6 +182,7 @@ struct AppSettings: Codable, Equatable {
         readingVoiceIdentifier = (try? container.decodeIfPresent(String.self, forKey: .readingVoiceIdentifier)) ?? defaults.readingVoiceIdentifier
         readingVolume = value(.readingVolume, defaults.readingVolume)
         soundSignalsEnabled = value(.soundSignalsEnabled, defaults.soundSignalsEnabled)
+        stereoPanning = value(.stereoPanning, defaults.stereoPanning)
         toneDelay = value(.toneDelay, defaults.toneDelay)
         referenceTone = value(.referenceTone, defaults.referenceTone)
         toneBaseOffset = value(.toneBaseOffset, defaults.toneBaseOffset)
@@ -193,6 +196,7 @@ struct AppSettings: Codable, Equatable {
         targetWind = (try? container.decodeIfPresent(Double.self, forKey: .targetWind)) ?? defaults.targetWind
         errorThreshold = value(.errorThreshold, defaults.errorThreshold)
         errorRange = value(.errorRange, defaults.errorRange)
+        announceRudderAngle = value(.announceRudderAngle, defaults.announceRudderAngle)
         invertRudderAngle = value(.invertRudderAngle, defaults.invertRudderAngle)
         rudderAngleCorrection = value(.rudderAngleCorrection, defaults.rudderAngleCorrection)
         autoResumeMode = value(.autoResumeMode, defaults.autoResumeMode)

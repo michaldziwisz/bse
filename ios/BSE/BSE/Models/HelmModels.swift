@@ -121,13 +121,15 @@ struct HelmSnapshot: Equatable {
 
         if let value = displayedValue(using: settings) {
             if settings.target == .course {
-                // Odchyłka od zadanego kursu: ujemna = trzeba iść prawiej,
-                // dodatnia = lewiej (na życzenie użytkownika, zamiast liczby ze
-                // znakiem). Zero = na kursie.
+                // Odchyłka od zadanego kursu. Komenda dla sternika jest w slangu
+                // żeglarskim ODWROTNA do strony, z której odzywa się sygnał
+                // dźwiękowy: sygnał z prawej (wartość < 0, próbka right) => skręcaj
+                // w lewo => „lewiej”; sygnał z lewej (wartość > 0, próbka left) =>
+                // skręcaj w prawo => „prawiej”. Zero = na kursie.
                 if value < 0 {
-                    parts.append("prawiej \(abs(value))")
+                    parts.append("lewiej \(abs(value))")
                 } else if value > 0 {
-                    parts.append("lewiej \(value)")
+                    parts.append("prawiej \(value)")
                 } else {
                     parts.append("0")
                 }
@@ -145,7 +147,7 @@ struct HelmSnapshot: Equatable {
             }
         }
 
-        if let rudder {
+        if settings.announceRudderAngle, let rudder {
             let side = rudder > 0 ? "Prawo" : "Lewo"
             parts.append("\(side) \(abs(Int(rudder.rounded())))")
         }

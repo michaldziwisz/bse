@@ -17,6 +17,7 @@ final class HelmMonitor: ObservableObject {
     private let apiClient: HelmAPIClient
     private let speechService: SpeechService
     private let tonePlayer: TonePlayer
+    private let samplePlayer: SamplePlayer
     private let audioSessionController: AudioSessionController
     private let notificationController: SafetyNotificationController
     private let nowPlayingController: NowPlayingController
@@ -24,7 +25,6 @@ final class HelmMonitor: ObservableObject {
 
     private let statusInterval: TimeInterval = 0.5
     private let loopDelayNanoseconds: UInt64 = 100_000_000
-    private let frequencyMid = 440.0
     private let connectionAlertRepeatInterval: TimeInterval = 20
     private let keepAliveWatchdogInterval: TimeInterval = 3
 
@@ -61,6 +61,7 @@ final class HelmMonitor: ObservableObject {
         self.nowPlayingController = nowPlayingController
         self.speechService = SpeechService(audioSessionController: audioSessionController)
         self.tonePlayer = TonePlayer(audioSessionController: audioSessionController)
+        self.samplePlayer = SamplePlayer(audioSessionController: audioSessionController)
         self.deviceWifiController = DeviceWifiController(
             ssid: AppSettings.deviceWifiSSID,
             passphrase: AppSettings.deviceWifiPassphrase
@@ -100,6 +101,7 @@ final class HelmMonitor: ObservableObject {
         isSpeechActive = false
         speechService.stop()
         tonePlayer.stop()
+        samplePlayer.stop()
         audioSessionController.stopKeepAlive()
         nowPlayingController.markStopped()
         notificationController.clearConnectionLostAlert()
@@ -127,6 +129,7 @@ final class HelmMonitor: ObservableObject {
             isSpeechActive = false
             speechService.stop()
             tonePlayer.stop()
+            samplePlayer.stop()
             audioSessionController.stopKeepAlive()
             nowPlayingController.markStopped()
             notificationController.clearConnectionLostAlert()
@@ -409,33 +412,42 @@ final class HelmMonitor: ObservableObject {
 
         guard errorExceeded || settings.toneOnCourse || !onTarget else { return }
 
-        // Ton właściwy: 100 ms. Ton referencyjny został usunięty na życzenie —
-        // sygnalizujemy wyłącznie ton odchyłki.
-        let mainToneDuration: TimeInterval = 0.1
+        // Sygnał odchyłki gramy GOTOWĄ PRÓBKĄ dźwiękową (te same nagrania co na
+        // Androidzie), a nie syntezowanym tonem. Kierunek wybiera próbkę (left =
+        // sygnał z lewej, right = z prawej, center = na kursie), a WIELKOŚĆ
+        // odchyłki podnosi wysokość odtwarzanej próbki — dokładnie tak, jak
+        // wcześniej rósł ton. Warianty półtonowe są wyrenderowane offline (z
+        // zachowaniem długości) i dołączone do aplikacji, więc w runtime gramy
+        // je odpornym AVAudioPlayerem, bez AVAudioEngine.
+        //
+        // Komenda głosowa jest w slangu żeglarskim ODWROTNA do strony sygnału
+        // (dźwięk z prawej => „lewiej”) — patrz HelmSnapshot.spokenReading.
+        let volume = settings.toneVolume / 100
+        // Panorama próbek po kanałach (tylko dźwięki, nie mowa). Gdy włączona,
+        // sygnał „lewy” idzie bardziej w lewy kanał, „prawy” w prawy — po 50% w
+        // bok, środek zostaje na środku. Bez podłączonych obu słuchawek i tak
+        // brzmi jak dotąd.
+        let panMagnitude = settings.stereoPanning ? 0.5 : 0.0
 
         if errorExceeded || (!onTarget && delta != 0) {
             let compensatedDelta = absoluteDelta - (onTarget ? settings.errorThreshold : 0)
             let severity = min(compensatedDelta, settings.errorRange)
-            let gain = delta > 0 ? 1.0 : -1.0
             let multiplier = settings.broadTonalSpread ? 2.0 : 1.0
             let baseOffset = settings.toneBaseOffset / 12
-            let frequency = frequencyMid * pow(
-                2,
-                gain * ((multiplier * severity / settings.errorRange) + baseOffset)
-            )
-            await tonePlayer.play(
-                frequency: frequency,
-                duration: mainToneDuration,
-                volume: settings.toneVolume / 100,
-                waveform: settings.toneType
-            )
+            // Ten sam wykładnik co dawniej dla wysokości tonu, ale ZAWSZE
+            // dodatni (w górę) — kierunek niesie już wybrana próbka. Wykładnik
+            // (w oktawach) przeliczamy na półtony (×12), bo próbki są w siatce
+            // półtonowej; docinamy do dostępnego zakresu w SamplePlayer.
+            let exponent = (multiplier * severity / settings.errorRange) + baseOffset
+            let semitone = Int((exponent * 12).rounded())
+            // delta > 0 => „lewiej” (próbka left, w lewy kanał), delta < 0 =>
+            // „prawiej” (próbka right, w prawy kanał).
+            let signal: SamplePlayer.Signal = delta > 0 ? .left : .right
+            let pan = delta > 0 ? -panMagnitude : panMagnitude
+            await samplePlayer.play(signal: signal, semitone: semitone, volume: volume, pan: pan)
         } else {
-            await tonePlayer.play(
-                frequency: frequencyMid,
-                duration: mainToneDuration,
-                volume: settings.toneVolume / 100,
-                waveform: settings.toneType
-            )
+            // Na kursie: próbka „center” w naturalnej wysokości, na środku.
+            await samplePlayer.play(signal: .center, semitone: 0, volume: volume, pan: 0)
         }
     }
 

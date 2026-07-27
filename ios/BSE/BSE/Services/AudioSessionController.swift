@@ -98,15 +98,20 @@ final class AudioSessionController {
             return keepAliveData
         }
 
-        // 1 sekunda cichego sinusa 220 Hz. Amplituda ~0.004 (~-48 dB): niesłyszalna
-        // dla użytkownika, ale „realna” dla systemu, więc iOS traktuje aplikację
-        // jako aktywnie odtwarzającą.
+        // 1 sekunda cichego sinusa 40 Hz. Amplituda ~0.004 (~-48 dB): energia
+        // pozostaje „realna” dla systemu (iOS traktuje aplikację jako aktywnie
+        // odtwarzającą i najmocniej chroni proces w tle), ale częstotliwość celowo
+        // spadła z 220 Hz do 40 Hz. Próg słyszalności ucha przy 40 Hz jest o ~40 dB
+        // wyższy niż przy 220 Hz, więc ten sam poziom sygnału staje się dla
+        // słuchacza praktycznie niesłyszalny — użytkownik zgłaszał, że ton 220 Hz
+        // było słychać w tle podczas odtwarzania próbek. 40 pełnych cykli mieści się
+        // dokładnie w 1 s, więc pętla domyka się na zero-crossing (bez trzasku).
         let frameCount = sampleRate
         var pcm = Data(capacity: frameCount * MemoryLayout<Int16>.size)
         let amplitude = 0.004
         for frame in 0..<frameCount {
             let time = Double(frame) / Double(sampleRate)
-            let value = sin(2 * .pi * 220 * time) * amplitude
+            let value = sin(2 * .pi * 40 * time) * amplitude
             var sample = Int16(max(min(value * Double(Int16.max), Double(Int16.max)), Double(Int16.min)))
                 .littleEndian
             pcm.append(Data(bytes: &sample, count: MemoryLayout<Int16>.size))

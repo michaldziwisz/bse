@@ -73,12 +73,6 @@ struct SettingsView: View {
                         .accessibilityHint("Gdy włączone i masz podłączone obie słuchawki, sygnał odchyłki w lewo słychać bardziej z lewej strony, a w prawo z prawej (po 50% w bok). Sygnał na kursie pozostaje na środku. Dotyczy tylko dźwięków sygnału, nie mowy.")
                     Toggle("Odtwarzaj ton na zadanym kursie", isOn: binding(\.toneOnCourse))
 
-                    Picker("Typ dźwięku", selection: binding(\.toneType)) {
-                        ForEach(ToneWaveform.allCases) { waveform in
-                            Text(waveform.title).tag(waveform)
-                        }
-                    }
-
                     AdjustableSettingRow(
                         title: "Głośność sygnałów",
                         value: settingsStore.settings.toneVolume,

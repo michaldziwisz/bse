@@ -36,7 +36,15 @@ final class AudioSessionController {
         // iOS pokazuje Now Playing na ekranie blokady i najmocniej chroni proces
         // przed ubiciem w tle. Kompromis: włączenie odczytu wyciszy inne audio
         // (muzyka/nawigacja) — na łódce priorytetem jest, by odczyt steru nie milkł.
-        try session.setCategory(.playback, mode: .voicePrompt)
+        //
+        // Tryb .default, NIE .voicePrompt: .voicePrompt jest strojony pod MOWĘ i
+        // przetwarza sygnał tak, że krótki, wysoki transjent (próbka „na kursie” =
+        // ~22 ms, dominanta 2 kHz) był tłumiony i na iOS w praktyce niesłyszalny,
+        // podczas gdy niższe/dłuższe left (125 Hz) i right (500 Hz) przechodziły.
+        // Android gra ten sam plik dobrze, bo używa toru bez przetwarzania pod głos
+        // (AudioTrack USAGE_MEDIA + CONTENT_TYPE_SONIFICATION). .default to iOS-owy
+        // odpowiednik — dźwięki sygnału przechodzą surowo, a mowa działa jak dotąd.
+        try session.setCategory(.playback, mode: .default)
         try session.setActive(true)
     }
 

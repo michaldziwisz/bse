@@ -29,11 +29,23 @@ enum AudioDiagnostics {
 
     static var lastEvent = "—"        // ostatnie zdarzenie z opisem
 
+    // Rozbicie per sygnał — KLUCZOWE dla „na kursie cisza”: pokazuje, czy gałąź
+    // center jest w ogóle wywoływana, czy zawsze leci left/right (kurs drga, więc
+    // delta rzadko = 0). Plus kontekst decyzji z HelmMonitor.playSignal.
+    static var playedCenter = 0
+    static var playedLeft = 0
+    static var playedRight = 0
+    static var lastMode = "—"          // tryb odczytu (target)
+    static var lastToneOnCourse = "—"  // stan ustawienia „ton na zadanym kursie”
+    static var lastDelta = "—"         // ostatnia policzona odchyłka
+
     static func reset() {
         requested = 0; skippedInProgress = 0; skippedByGuard = 0
         attempted = 0; missingResource = 0; prepareFailed = 0
         initFailed = 0; playReturnedFalse = 0
         succeeded = 0; lastEvent = "—"
+        playedCenter = 0; playedLeft = 0; playedRight = 0
+        lastMode = "—"; lastToneOnCourse = "—"; lastDelta = "—"
     }
 
     /// Wielolinijkowy, czytelny raport dla panelu diagnostycznego.
@@ -44,6 +56,12 @@ enum AudioDiagnostics {
         Pominięto (warunki): \(skippedByGuard)
         Prób odtworzenia: \(attempted)
         Odtworzono poprawnie: \(succeeded)
+        Zagrano na kursie (center): \(playedCenter)
+        Zagrano lewiej (left): \(playedLeft)
+        Zagrano prawiej (right): \(playedRight)
+        Tryb odczytu: \(lastMode)
+        Ton na kursie włączony: \(lastToneOnCourse)
+        Ostatnia odchyłka: \(lastDelta)
         Brak pliku próbki: \(missingResource)
         Błąd sesji audio: \(prepareFailed)
         Błąd utworzenia odtwarzacza: \(initFailed)

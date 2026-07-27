@@ -113,12 +113,7 @@ final class SamplePlayer {
     private func resourceName(for signal: Signal, semitone: Int) -> String {
         switch signal {
         case .center:
-            // DIAGNOSTYKA (build 11): podstawiamy pod „na kursie” dźwięk RIGHT,
-            // który u użytkownika GRA. Cała reszta ścieżki center bez zmian.
-            // Jeśli „na kursie” zacznie grać (głosem right) => problem był w PLIKU
-            // sig_center. Jeśli nadal cisza => problem w ŚCIEŻCE/timingu center.
-            // Do cofnięcia po ustaleniu wyniku — wtedy wraca "sig_center".
-            return "sig_right_00"
+            return "sig_center"
         case .left, .right:
             let side = signal == .left ? "left" : "right"
             let clamped = min(max(semitone, 0), Self.maxSemitone)

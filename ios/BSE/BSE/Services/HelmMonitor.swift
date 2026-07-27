@@ -426,6 +426,9 @@ final class HelmMonitor: ObservableObject {
         }
 
         AudioDiagnostics.requested += 1
+        AudioDiagnostics.lastMode = "\(settings.target)"
+        AudioDiagnostics.lastToneOnCourse = settings.toneOnCourse ? "tak" : "nie"
+        AudioDiagnostics.lastDelta = String(format: "%.1f", delta)
 
         // Sygnał odchyłki gramy GOTOWĄ PRÓBKĄ dźwiękową (te same nagrania co na
         // Androidzie), a nie syntezowanym tonem. Kierunek wybiera próbkę (left =
@@ -459,9 +462,11 @@ final class HelmMonitor: ObservableObject {
             // „prawiej” (próbka right, w prawy kanał).
             let signal: SamplePlayer.Signal = delta > 0 ? .left : .right
             let pan = delta > 0 ? -panMagnitude : panMagnitude
+            if signal == .left { AudioDiagnostics.playedLeft += 1 } else { AudioDiagnostics.playedRight += 1 }
             await samplePlayer.play(signal: signal, semitone: semitone, volume: volume, pan: pan)
         } else {
             // Na kursie: próbka „center” w naturalnej wysokości, na środku.
+            AudioDiagnostics.playedCenter += 1
             await samplePlayer.play(signal: .center, semitone: 0, volume: volume, pan: 0)
         }
     }

@@ -186,7 +186,14 @@ struct AppSettings: Codable, Equatable {
         toneDelay = value(.toneDelay, defaults.toneDelay)
         referenceTone = value(.referenceTone, defaults.referenceTone)
         toneBaseOffset = value(.toneBaseOffset, defaults.toneBaseOffset)
-        toneOnCourse = value(.toneOnCourse, defaults.toneOnCourse)
+        // „Na kursie” WYMUSZAMY na włączone, ignorując ewentualne zapisane
+        // `false`. To sygnał bezpieczeństwa (potwierdza „jesteś na kursie”) i ma
+        // być spójne z Androidem, gdzie gra domyślnie. Wcześniej dało się go
+        // wyłączyć w UI — i u użytkownika był wyłączony, przez co próbka „na kursie”
+        // nigdy nie padała (diagnostyka: playedCenter=0, toneOnCourse=nie). Toggle
+        // w Ustawieniach nadal działa w obrębie sesji, ale po ponownym starcie
+        // aplikacji wraca do włączonego.
+        toneOnCourse = true
         toneType = value(.toneType, defaults.toneType)
         toneVolume = value(.toneVolume, defaults.toneVolume)
         shortTones = value(.shortTones, defaults.shortTones)

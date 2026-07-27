@@ -58,19 +58,14 @@ final class SamplePlayer {
     /// w górę (0 = naturalna wysokość próbki), głośnością [volume] (0…1) oraz
     /// panoramą [pan] (−1 = lewo, 0 = środek, +1 = prawo).
     func play(signal: Signal, semitone: Int, volume: Double, pan: Double) async {
-        AudioDiagnostics.attempted += 1
         let name = resourceName(for: signal, semitone: semitone)
         do {
             try audioSessionController.prepareForPlayback()
         } catch {
-            AudioDiagnostics.prepareFailed += 1
-            AudioDiagnostics.lastEvent = "błąd sesji: \(error.localizedDescription)"
             return
         }
 
         guard let data = loadData(named: name) else {
-            AudioDiagnostics.missingResource += 1
-            AudioDiagnostics.lastEvent = "brak zasobu \(name)"
             CrashReporter.breadcrumb("sample: brak zasobu \(name)")
             return
         }
@@ -85,23 +80,16 @@ final class SamplePlayer {
             // kompletny ZANIM zawołamy play() — nawet dla najkrótszej próbki
             // (center ~40 ms). Reużywanie jednej instancji przez currentTime=0 +
             // natychmiastowy play() (build 8) gubiło najkrótszą próbkę: reset
-            // pozycji na mikrobuforze bywa zawodny i „na kursie” słychać było ciszę
-            // MIMO że play() zwracał true. Świeża instancja to eliminuje.
+            // pozycji na mikrobuforze bywa zawodny. Świeża instancja to eliminuje.
             let player = try AVAudioPlayer(data: data)
             player.volume = Float(min(max(volume, 0), 1))
             player.pan = Float(min(max(pan, -1), 1))
             player.prepareToPlay()
             guard player.play() else {
-                AudioDiagnostics.playReturnedFalse += 1
-                AudioDiagnostics.lastEvent = "play() zwrócił false: \(name)"
                 return
             }
-            AudioDiagnostics.succeeded += 1
-            AudioDiagnostics.lastEvent = "OK \(name) pan \(String(format: "%.2f", pan))"
             activePlayer = player
         } catch {
-            AudioDiagnostics.initFailed += 1
-            AudioDiagnostics.lastEvent = "błąd odtwarzacza: \(error.localizedDescription)"
             return
         }
     }

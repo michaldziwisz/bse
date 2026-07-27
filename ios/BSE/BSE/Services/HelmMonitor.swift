@@ -285,12 +285,6 @@ final class HelmMonitor: ObservableObject {
                             settings: capturedSettings
                         )
                     }
-                } else if canSignal,
-                          isSignalInProgress,
-                          now.timeIntervalSince(lastSignalAt) >= currentSettings.toneDelay {
-                    // Nadszedł czas na sygnał, ale poprzedni jeszcze się nie
-                    // zakończył — mierzymy to, bo może tłumaczyć „czasem nie gra”.
-                    AudioDiagnostics.skippedInProgress += 1
                 }
             }
 
@@ -402,7 +396,6 @@ final class HelmMonitor: ObservableObject {
         // egzemplarzu urządzenia) => brak sygnału. Zgodne z zachowaniem
         // wbudowanego frontendu urządzenia.
         guard let currentValue else {
-            AudioDiagnostics.skippedByGuard += 1
             return
         }
 
@@ -412,7 +405,6 @@ final class HelmMonitor: ObservableObject {
         } else if let previousValue {
             delta = HelmMath.relativeCourse(course: currentValue, targetCourse: previousValue)
         } else {
-            AudioDiagnostics.skippedByGuard += 1
             return
         }
 
@@ -421,14 +413,8 @@ final class HelmMonitor: ObservableObject {
         let onTarget = targetValue != nil
 
         guard errorExceeded || settings.toneOnCourse || !onTarget else {
-            AudioDiagnostics.skippedByGuard += 1
             return
         }
-
-        AudioDiagnostics.requested += 1
-        AudioDiagnostics.lastMode = "\(settings.target)"
-        AudioDiagnostics.lastToneOnCourse = settings.toneOnCourse ? "tak" : "nie"
-        AudioDiagnostics.lastDelta = String(format: "%.1f", delta)
 
         // Sygnał odchyłki gramy GOTOWĄ PRÓBKĄ dźwiękową (te same nagrania co na
         // Androidzie), a nie syntezowanym tonem. Kierunek wybiera próbkę (left =
@@ -462,11 +448,9 @@ final class HelmMonitor: ObservableObject {
             // „prawiej” (próbka right, w prawy kanał).
             let signal: SamplePlayer.Signal = delta > 0 ? .left : .right
             let pan = delta > 0 ? -panMagnitude : panMagnitude
-            if signal == .left { AudioDiagnostics.playedLeft += 1 } else { AudioDiagnostics.playedRight += 1 }
             await samplePlayer.play(signal: signal, semitone: semitone, volume: volume, pan: pan)
         } else {
             // Na kursie: próbka „center” w naturalnej wysokości, na środku.
-            AudioDiagnostics.playedCenter += 1
             await samplePlayer.play(signal: .center, semitone: 0, volume: volume, pan: 0)
         }
     }

@@ -21,16 +21,6 @@ final class AudioSessionController {
     private(set) var isKeepAliveEnabled = false
     private var notificationObservers: [NSObjectProtocol] = []
 
-    /// Śledzi, czy sesja jest już skonfigurowana i aktywna. Dzięki temu NIE
-    /// wołamy setCategory/setActive przy każdym odtworzeniu próbki i każdej
-    /// wypowiedzi. Rekonfiguracja AKTYWNEJ sesji w trakcie grania próbki
-    /// powodowała, że próbka na moment milkła, gdy startowała synteza mowy —
-    /// obie dzielą tę samą sesję, a mowa wołała prepareForPlayback bez
-    /// zatrzymywania grającej próbki. Flagę unieważniamy tylko przy zdarzeniach,
-    /// które faktycznie mogą zerwać sesję (przerwanie, reset serwera mediów,
-    /// zmiana trasy, zatrzymanie podtrzymania).
-    private var isSessionActive = false
-
     init() {
         observeAudioLifecycle()
     }
@@ -42,19 +32,12 @@ final class AudioSessionController {
     }
 
     func prepareForPlayback() throws {
-        // Idempotentne: gdy sesja jest już skonfigurowana i aktywna, NIC nie
-        // robimy. Ponowne setCategory/setActive na aktywnej sesji w trakcie
-        // grania próbki powodowało chwilowe milknięcie dźwięku przy starcie mowy
-        // (obie dzielą tę samą sesję). Rekonfigurujemy tylko gdy sesja realnie
-        // nie jest aktywna (pierwszy raz albo po zerwaniu — patrz invalidateSession).
-        guard !isSessionActive else { return }
         // BEZ .mixWithOthers: aplikacja jest GŁÓWNYM odtwarzaczem, dzięki czemu
         // iOS pokazuje Now Playing na ekranie blokady i najmocniej chroni proces
         // przed ubiciem w tle. Kompromis: włączenie odczytu wyciszy inne audio
         // (muzyka/nawigacja) — na łódce priorytetem jest, by odczyt steru nie milkł.
         try session.setCategory(.playback, mode: .voicePrompt)
         try session.setActive(true)
-        isSessionActive = true
     }
 
     func startKeepAlive() throws {
@@ -67,7 +50,6 @@ final class AudioSessionController {
         keepAlivePlayer?.stop()
         keepAlivePlayer = nil
         isKeepAliveEnabled = false
-        isSessionActive = false
         do {
             try session.setActive(false, options: [.notifyOthersOnDeactivation])
         } catch {
@@ -231,19 +213,11 @@ final class AudioSessionController {
         }
 
         CrashReporter.breadcrumb("audio: interruption \(type == .began ? "began" : "ended")")
-        guard type == .ended else {
-            // Przerwanie zawiesza sesję — przy .began oznacz ją jako nieaktywną,
-            // żeby najbliższe prepareForPlayback faktycznie ją odbudowało.
-            isSessionActive = false
-            return
-        }
+        guard type == .ended else { return }
         recoverKeepAliveIfNeeded()
     }
 
     private func recoverKeepAliveIfNeeded() {
-        // Zdarzenia audio (reset serwera mediów, zmiana trasy, koniec przerwania)
-        // mogły zerwać sesję — wymuszamy pełną rekonfigurację, unieważniając flagę.
-        isSessionActive = false
         if isKeepAliveEnabled {
             do {
                 try prepareForPlayback()

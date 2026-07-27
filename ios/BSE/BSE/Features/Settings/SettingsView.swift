@@ -141,6 +141,20 @@ struct SettingsView: View {
                         onConfirm: { Task { await monitor.runAdministrationAction(.reboot) } }
                     )
                 }
+                Section {
+                    Text(AudioDiagnostics.report())
+                        .font(.footnote.monospacedDigit())
+                        .textSelection(.enabled)
+                        .accessibilityLabel("Liczniki odtwarzania sygnałów. \(AudioDiagnostics.report())")
+                    Button("Wyzeruj liczniki") {
+                        AudioDiagnostics.reset()
+                    }
+                    .accessibilityHint("Zeruje liczniki diagnostyki dźwięku przed nową próbą odsłuchu.")
+                } header: {
+                    Text("Diagnostyka dźwięku")
+                } footer: {
+                    Text("Liczniki pomagają ustalić, dlaczego sygnał odchyłki czasem nie gra. Wyzeruj je, włącz odczyt na kilka minut, wróć tutaj i odczytaj wartości.")
+                }
             }
             .navigationTitle("Ustawienia")
         }

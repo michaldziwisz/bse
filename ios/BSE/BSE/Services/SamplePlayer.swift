@@ -37,20 +37,13 @@ final class SamplePlayer {
     private static let maxSemitone = 24
 
     private let audioSessionController: AudioSessionController
-    /// Aktualnie grający odtwarzacz (do zatrzymania przy następnym sygnale).
-    /// Wskazuje na jedną z instancji z `players` — NIE zwalniamy jej.
-    private weak var activePlayer: AVAudioPlayer?
-    /// Gotowe, wstępnie przygotowane odtwarzacze per plik. KLUCZOWE dla
-    /// niezawodności: tworzymy AVAudioPlayer i wołamy prepareToPlay() RAZ, z
-    /// góry, więc w gorącej ścieżce bufor jest już gotowy. Wcześniej tworzyliśmy
-    /// świeży player i wołaliśmy play() zaraz po prepareToPlay() — a przygotowanie
-    /// bufora jest asynchroniczne, więc krótka próbka (40–200 ms) sporadycznie się
-    /// gubiła MIMO że play() zwracał true (diagnostyka: 25/25 „OK”, a użytkownik
-    /// słyszał braki). Android nie ma tego problemu, bo trzyma zdekodowane PCM i
-    /// gra przez AudioTrack MODE_STATIC. Cache gotowych playerów to iOS-owy
-    /// odpowiednik. Dodatkowo: zero alokacji/zwalniania w gorącej ścieżce = dalej
-    /// od SIGSEGV (zwalnianie AVAudioPlayera z aktywnym timerem crashowało).
-    private var players: [String: AVAudioPlayer] = [:]
+    /// Aktualnie grający odtwarzacz. Trzymamy go MOCNO do następnego play()/stop()
+    /// — NIE zwalniamy z opóźnionego Taska (zwolnienie AVAudioPlayera z aktywnym
+    /// timerem na głównej pętli powodowało SIGSEGV).
+    private var activePlayer: AVAudioPlayer?
+    /// Zdekodowane dane WAV per plik — próbek mało i krótkie, trzymamy w pamięci,
+    /// żeby wyeliminować odczyt dysku na gorącej ścieżce.
+    private var cache: [String: Data] = [:]
 
     init(audioSessionController: AudioSessionController) {
         self.audioSessionController = audioSessionController
@@ -75,33 +68,42 @@ final class SamplePlayer {
             return
         }
 
-        guard let player = preparedPlayer(named: name) else {
+        guard let data = loadData(named: name) else {
             AudioDiagnostics.missingResource += 1
             AudioDiagnostics.lastEvent = "brak zasobu \(name)"
             CrashReporter.breadcrumb("sample: brak zasobu \(name)")
             return
         }
 
-        // Zatrzymaj poprzedni sygnał (jeśli inny odtwarzacz jeszcze gra).
-        if let active = activePlayer, active !== player {
-            active.stop()
-        }
+        stop()
 
         CrashReporter.breadcrumb("sample: play \(name) pan \(String(format: "%.2f", pan))")
-        player.volume = Float(min(max(volume, 0), 1))
-        player.pan = Float(min(max(pan, -1), 1))
-        // Od początku próbki. prepareToPlay() dogrywa bufor po ustawieniu czasu —
-        // na już przygotowanym odtwarzaczu jest tanie, a gwarantuje gotowość.
-        player.currentTime = 0
-        player.prepareToPlay()
-        guard player.play() else {
-            AudioDiagnostics.playReturnedFalse += 1
-            AudioDiagnostics.lastEvent = "play() zwrócił false: \(name)"
+        do {
+            // ŚWIEŻY odtwarzacz per odtworzenie — jak Android (AudioTrack
+            // MODE_STATIC per play). AVAudioPlayer(data:) dekoduje CAŁY plik
+            // synchronicznie do pamięci przy inicjalizacji, więc bufor jest
+            // kompletny ZANIM zawołamy play() — nawet dla najkrótszej próbki
+            // (center ~40 ms). Reużywanie jednej instancji przez currentTime=0 +
+            // natychmiastowy play() (build 8) gubiło najkrótszą próbkę: reset
+            // pozycji na mikrobuforze bywa zawodny i „na kursie” słychać było ciszę
+            // MIMO że play() zwracał true. Świeża instancja to eliminuje.
+            let player = try AVAudioPlayer(data: data)
+            player.volume = Float(min(max(volume, 0), 1))
+            player.pan = Float(min(max(pan, -1), 1))
+            player.prepareToPlay()
+            guard player.play() else {
+                AudioDiagnostics.playReturnedFalse += 1
+                AudioDiagnostics.lastEvent = "play() zwrócił false: \(name)"
+                return
+            }
+            AudioDiagnostics.succeeded += 1
+            AudioDiagnostics.lastEvent = "OK \(name) pan \(String(format: "%.2f", pan))"
+            activePlayer = player
+        } catch {
+            AudioDiagnostics.initFailed += 1
+            AudioDiagnostics.lastEvent = "błąd odtwarzacza: \(error.localizedDescription)"
             return
         }
-        AudioDiagnostics.succeeded += 1
-        AudioDiagnostics.lastEvent = "OK \(name) pan \(String(format: "%.2f", pan))"
-        activePlayer = player
     }
 
     // MARK: - Zasoby
@@ -119,11 +121,11 @@ final class SamplePlayer {
         }
     }
 
-    /// Zwraca gotowy, przygotowany odtwarzacz dla danego pliku. Tworzy go RAZ
-    /// (dekodowanie + prepareToPlay) i cache'uje — kolejne odtworzenia reużywają
-    /// tej samej, w pełni przygotowanej instancji.
-    private func preparedPlayer(named name: String) -> AVAudioPlayer? {
-        if let cached = players[name] {
+    /// Zwraca zdekodowane dane WAV dla pliku (z cache lub z bundla). Trzymamy
+    /// Data w pamięci — świeży AVAudioPlayer(data:) tworzymy z tego przy każdym
+    /// odtworzeniu (dekoduje cały bufor synchronicznie, jak MODE_STATIC).
+    private func loadData(named name: String) -> Data? {
+        if let cached = cache[name] {
             return cached
         }
         // Zasoby mogą trafić do katalogu „Signals” (folder reference) albo do
@@ -131,11 +133,10 @@ final class SamplePlayer {
         // na sposób spakowania przez xcodegen.
         let url = Bundle.main.url(forResource: name, withExtension: "wav", subdirectory: "Signals")
             ?? Bundle.main.url(forResource: name, withExtension: "wav")
-        guard let url, let player = try? AVAudioPlayer(contentsOf: url) else {
+        guard let url, let data = try? Data(contentsOf: url) else {
             return nil
         }
-        player.prepareToPlay()
-        players[name] = player
-        return player
+        cache[name] = data
+        return data
     }
 }

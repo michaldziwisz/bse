@@ -57,6 +57,19 @@ def render(mono_src, out_path, semitones):
              "pitch", str(semitones * 100), SEGMENT_MS, "gain", "-n", NORM_DB])
 
 
+# Minimalna długość próbki center w ms. Źródłowy 0.wav trwa ~40 ms — dla iOS
+# AVAudioPlayer to na granicy: mikropróbka bywa kończona/zwalniana, zanim bufor
+# trafi na wyjście, i „na kursie” słychać ciszę (Android z AudioTrack MODE_STATIC
+# gra to bez problemu). Dograna cisza na końcu daje odtwarzaczowi bufor i czas,
+# by na pewno wypchnąć realny dźwięk — jego brzmienie/długość pozostają bez zmian.
+CENTER_MIN_MS = "0.15"
+
+
+def render_center(mono_src, out_path):
+    # Normalizacja + pad ciszy na końcu do CENTER_MIN_MS (jeśli krótszy).
+    sox([mono_src, "-b", "16", out_path, "gain", "-n", NORM_DB, "pad", "0", CENTER_MIN_MS])
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     tmp = tempfile.mkdtemp()
@@ -67,7 +80,7 @@ def main():
         sox([os.path.join(SRC, src), "-c", "1", "-b", "16", "-r", "44100", d])
         mono[name] = d
 
-    render(mono["center"], os.path.join(OUT, "sig_center.wav"), 0)
+    render_center(mono["center"], os.path.join(OUT, "sig_center.wav"))
 
     for side in ("left", "right"):
         src = mono[side]

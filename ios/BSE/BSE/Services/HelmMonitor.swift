@@ -10,6 +10,8 @@ final class HelmMonitor: ObservableObject {
     @Published private(set) var lastAnnouncement = ""
     @Published var errorMessage: String?
     @Published var adminMessage: String?
+    /// Czy `adminMessage` to komunikat o błędzie (steruje kolorem i tonem linii wyniku).
+    @Published var adminIsError = false
     @Published var isBusy = false
     @Published var lastCrashReason: String?
 
@@ -211,6 +213,7 @@ final class HelmMonitor: ObservableObject {
 
     func clearStatusMessage() {
         adminMessage = nil
+        adminIsError = false
     }
 
     func clearError() {
@@ -232,9 +235,40 @@ final class HelmMonitor: ObservableObject {
             case .reboot:
                 adminMessage = "Urządzenie rozpoczyna restart."
             }
+            adminIsError = false
         } catch {
-            adminMessage = error.localizedDescription
+            adminMessage = describeAdminFailure(action, error: error)
+            adminIsError = true
         }
+    }
+
+    /// Zamienia błąd czynności na zdanie zrozumiałe dla użytkownika.
+    ///
+    /// Najważniejszy przypadek to 404: `/api/calibrate` istnieje TYLKO w nowszym
+    /// firmware urządzenia (build z 11.07.2026), a serwer demonstracyjny nie ma
+    /// ani kalibracji, ani restartu. Surowe „Błąd serwera 404" nie mówi
+    /// użytkownikowi nic o przyczynie, więc tłumaczymy je na wprost.
+    private func describeAdminFailure(_ action: AdministrationAction, error: Error) -> String {
+        let nazwa: String
+        switch action {
+        case .calibrate: nazwa = "Kalibracja"
+        case .reboot: nazwa = "Restart urządzenia"
+        }
+
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .httpStatus(let code, _) where code == 404:
+                if settingsStore.settings.demoMode {
+                    return "\(nazwa) nie działa w trybie demonstracyjnym — serwer pokazowy obsługuje tylko odczyt. Wyłącz tryb demonstracyjny i połącz się z urządzeniem."
+                }
+                return "\(nazwa) nie jest obsługiwana przez to urządzenie. Najpewniej ma starsze oprogramowanie, w którym ta czynność nie istnieje."
+            case .timeout:
+                return "\(nazwa) nie doszła: urządzenie nie odpowiedziało w czasie. Sprawdź połączenie z siecią BlueSeaEye."
+            default:
+                break
+            }
+        }
+        return "\(nazwa) nie udała się. \(error.localizedDescription)"
     }
 
     private func runLoop() async {

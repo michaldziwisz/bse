@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
@@ -132,18 +133,67 @@ struct SettingsView: View {
                         title: "Kalibracja żyroskopu",
                         warning: "Kalibrację żyroskopu należy przeprowadzić po ostatecznym zamocowaniu urządzenia do stałej części statku i gdy statek jest stabilny. Najlepiej w porcie na cumach.",
                         confirmLabel: "Kalibruj",
+                        isEnabled: !monitor.isBusy,
                         onConfirm: { Task { await monitor.runAdministrationAction(.calibrate) } }
                     )
                     ConfirmableActionRow(
                         title: "Restart urządzenia",
                         warning: "Urządzenie uruchomi się ponownie. Po restarcie zwykle łączy się z powrotem samo. Jeśli w pobliżu jest inna zapamiętana sieć Wi-Fi, ponownie włącz odczyt na ekranie Ster, aby aplikacja wróciła do sieci „BlueSeaEye”.",
                         confirmLabel: "Restart",
+                        isEnabled: !monitor.isBusy,
                         onConfirm: { Task { await monitor.runAdministrationAction(.reboot) } }
                     )
+                    // Wynik czynności MUSI być widoczny (i odczytany) na TYM ekranie.
+                    // Wcześniej komunikat trafiał tylko na ukryty ekran Administracja,
+                    // więc kalibracja i restart działały bez żadnego potwierdzenia —
+                    // użytkownik VoiceOvera nie wiedział, czy akcja się udała.
+                    deviceActionStatusLine
                 }
             }
             .navigationTitle("Ustawienia")
         }
+    }
+
+    /// Linia wyniku czynności urządzenia. Ten sam wzorzec co linia statusu
+    /// połączenia na ekranie Ster: element złożony z cechą `updatesFrequently`,
+    /// dzięki czemu VoiceOver ogłasza zmianę sam. Dodatkowo wysyłamy jawne
+    /// ogłoszenie po polsku, bo Form nie odświeża fokusu przy zmianie tekstu.
+    @ViewBuilder
+    private var deviceActionStatusLine: some View {
+        if monitor.isBusy {
+            Text("Wysyłanie polecenia do urządzenia...")
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.updatesFrequently)
+        } else if let message = monitor.adminMessage {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(monitor.adminIsError ? Color.red : Color.green)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.updatesFrequently)
+
+                Button("Ukryj komunikat") {
+                    monitor.clearStatusMessage()
+                }
+                .font(.footnote)
+            }
+            .onAppear { announce(message) }
+            .onChange(of: message) { _, nowy in announce(nowy) }
+        }
+    }
+
+    /// Ogłoszenie VoiceOverem z JAWNYM oznaczeniem języka polskiego — bez tego
+    /// czytnik dobiera głos według bieżącego rotora i potrafi przeczytać polski
+    /// komunikat angielskim głosem (ta sama pułapka co w SpeechService).
+    private func announce(_ text: String) {
+        let attributed = NSAttributedString(
+            string: text,
+            attributes: [.accessibilitySpeechLanguage: "pl-PL"]
+        )
+        UIAccessibility.post(notification: .announcement, argument: attributed)
     }
 
     private func binding<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
@@ -197,6 +247,7 @@ private struct ConfirmableActionRow: View {
     let title: String
     let warning: String
     let confirmLabel: String
+    var isEnabled: Bool = true
     let onConfirm: () -> Void
 
     @State private var expanded = false
@@ -216,6 +267,7 @@ private struct ConfirmableActionRow: View {
                 onConfirm()
                 expanded = false
             }
+            .disabled(!isEnabled)
             .accessibilityHint(warning)
         }
     }
